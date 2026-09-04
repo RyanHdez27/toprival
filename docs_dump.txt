@@ -1,0 +1,6078 @@
+====================================
+FILE: Arquitectura TopRival.docx
+====================================
+
+🏆 TopRival — Arquitectura técnica definitiva
+1. Arquitectura general
+La propuesta sería:
+                    ┌─────────────────────┐
+                    │      USUARIO        │
+                    │ Web / Mobile futuro │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │     FRONTEND        │
+                    │ Next.js + TypeScript│
+                    └──────────┬──────────┘
+                               │ HTTPS
+                               ▼
+                 ┌───────────────────────────┐
+                 │       API BACKEND         │
+                 │                            │
+                 │   MONOLITO MODULAR        │
+                 │                            │
+                 │ ┌───────────────────────┐ │
+                 │ │ Identity              │ │
+                 │ │ Users                 │ │
+                 │ │ Games                 │ │
+                 │ │ Teams                 │ │
+                 │ │ Tournaments           │ │
+                 │ │ Registrations         │ │
+                 │ │ Competition           │ │
+                 │ │ Rankings              │ │
+                 │ │ Payments              │ │
+                 │ │ Notifications         │ │
+                 │ │ Admin                 │ │
+                 │ └───────────────────────┘ │
+                 └─────────────┬─────────────┘
+                               │
+                ┌──────────────┼───────────────┐
+                │              │               │
+                ▼              ▼               ▼
+          ┌──────────┐   ┌──────────┐   ┌──────────────┐
+          │PostgreSQL│   │  Redis   │   │ Object       │
+          │          │   │          │   │ Storage      │
+          └──────────┘   └──────────┘   │ S3/MinIO     │
+                                        └──────────────┘
+Para el MVP no recomiendo microservicios.
+La complejidad adicional de:
+API Gateway
+Service Discovery
+Message Brokers
+Distributed Transactions
+Observability distribuida
+no aporta suficiente valor todavía.
+El monolito modular permite desarrollar mucho más rápido.
+2. Stack tecnológico recomendado
+Para TopRival utilizaría:
+3. Monolito modular
+El backend no debería estar organizado simplemente como:
+controllers/
+services/
+repositories/
+entities/
+porque con el tiempo se convertiría en un proyecto difícil de mantener.
+Mejor:
+toprival-backend/
+src/main/java/com/toprival/
+├── identity/
+├── users/
+├── games/
+├── teams/
+├── tournamentrequests/
+├── tournaments/
+├── registrations/
+├── competition/
+├── rankings/
+├── payments/
+├── notifications/
+├── administration/
+└── shared/
+Cada módulo contiene internamente su propia Clean Architecture.
+4. Estructura de cada módulo
+Por ejemplo:
+tournaments/
+├── domain/
+│   ├── model/
+│   ├── enums/
+│   ├── repository/
+│   └── service/
+│
+├── application/
+│   ├── dto/
+│   ├── usecase/
+│   └── mapper/
+│
+├── infrastructure/
+│   ├── persistence/
+│   ├── security/
+│   └── external/
+│
+└── presentation/
+    ├── controller/
+    └── request/
+Flujo
+HTTP Request
+     │
+     ▼
+Controller
+     │
+     ▼
+Use Case
+     │
+     ▼
+Domain
+     │
+     ▼
+Repository Interface
+     │
+     ▼
+Infrastructure
+     │
+     ▼
+PostgreSQL
+La regla fundamental:
+Domain no conoce Spring, PostgreSQL, HTTP ni JWT.
+Esto hará mucho más sencilla una futura migración a microservicios.
+5. División de módulos
+Identity
+Responsable de:
+Login.
+Registro.
+Password.
+JWT.
+Refresh tokens.
+2FA.
+Verificación de email.
+Recuperación de contraseña.
+Google OAuth.
+Roles.
+Permisos.
+Sesiones.
+Users
+Responsable de:
+Perfil.
+Avatar.
+Nickname.
+Estadísticas.
+Historial competitivo.
+Games
+Responsable de:
+Juegos.
+Modos.
+Configuraciones competitivas.
+Teams
+Responsable de:
+Equipos.
+Miembros.
+Invitaciones.
+Capitán.
+Plantillas.
+Tournament Requests
+Responsable de:
+Solicitudes comunitarias.
+Votaciones.
+Fechas sugeridas.
+Conversión de solicitudes en torneos.
+6. Tournament
+Responsable de:
+Crear torneo.
+Configuración.
+Publicación.
+Inscripciones.
+Reglas.
+Estados.
+Cupos.
+7. Competition
+Este será probablemente el módulo más importante de TopRival.
+Contendrá:
+competition/
+├── bracket/
+├── stages/
+├── rounds/
+├── matches/
+├── results/
+├── disputes/
+├── advancement/
+└── seeding/
+Aquí estará el motor competitivo.
+8. Rankings
+Responsable de:
+Ranking global.
+Ranking por juego.
+Puntos.
+Victorias.
+Derrotas.
+Historial.
+9. Payments
+Aunque inicialmente podemos dejarlo preparado:
+payments/
+├── payment/
+├── providers/
+├── refunds/
+└── webhooks/
+Esto permitirá posteriormente integrar:
+Wompi.
+Mercado Pago.
+Stripe.
+PayPal.
+10. Autenticación de dos factores
+Aquí haría una modificación respecto a tu idea inicial.
+No intentaría que el usuario tenga simultáneamente:
+Email
+SMS
+Google Authenticator
+como métodos obligatorios.
+Lo correcto es:
+2FA
+ │
+ ├── TOTP
+ │    └── Google Authenticator
+ │
+ ├── Email OTP
+ │
+ └── SMS OTP
+El usuario podrá configurar uno o más métodos.
+Mi recomendación
+Método principal: TOTP
+Por ejemplo:
+Google Authenticator
+Microsoft Authenticator
+Authy
+El usuario escanea:
+QR
+ ↓
+Authenticator
+ ↓
+Código de 6 dígitos
+Backup
+Email OTP.
+SMS
+Lo dejaría como método opcional/futuro porque tiene mayor costo operativo y dependencia de proveedor.
+11. Flujo de autenticación
+POST /auth/login
+       │
+       ▼
+Validar credenciales
+       │
+       ▼
+¿2FA habilitado?
+   │          │
+  NO         SÍ
+   │          │
+   ▼          ▼
+ACCESS      MFA_REQUIRED
+TOKEN           │
+                ▼
+        POST /auth/2fa/verify
+                │
+                ▼
+            ACCESS TOKEN
+12. Endpoints — Identity
+Registro
+POST /api/v1/auth/register
+POST /api/v1/auth/verify-email
+POST /api/v1/auth/resend-verification
+Login
+POST /api/v1/auth/login
+POST /api/v1/auth/refresh
+POST /api/v1/auth/logout
+POST /api/v1/auth/logout-all
+Password
+POST /api/v1/auth/forgot-password
+POST /api/v1/auth/reset-password
+POST /api/v1/auth/change-password
+2FA
+GET  /api/v1/auth/2fa
+POST /api/v1/auth/2fa/setup
+POST /api/v1/auth/2fa/verify-setup
+POST /api/v1/auth/2fa/disable
+POST /api/v1/auth/2fa/email/send
+POST /api/v1/auth/2fa/email/verify
+POST /api/v1/auth/2fa/sms/send
+POST /api/v1/auth/2fa/sms/verify
+GET  /api/v1/auth/2fa/recovery-codes
+POST /api/v1/auth/2fa/recovery-codes/regenerate
+13. Users API
+GET    /api/v1/users/me
+PATCH  /api/v1/users/me
+GET    /api/v1/users/{id}
+GET    /api/v1/users/{id}/stats
+GET    /api/v1/users/{id}/tournaments
+GET    /api/v1/users/{id}/ranking
+14. Games API
+GET    /api/v1/games
+GET    /api/v1/games/{id}
+GET    /api/v1/games/{id}/modes
+POST   /api/v1/admin/games
+PATCH  /api/v1/admin/games/{id}
+DELETE /api/v1/admin/games/{id}
+POST   /api/v1/admin/games/{id}/modes
+PATCH  /api/v1/admin/game-modes/{id}
+DELETE /api/v1/admin/game-modes/{id}
+Como definiste que solo TopRival/admin crea y gestiona torneos, estos endpoints administrativos serán fundamentales.
+15. Teams API
+GET    /api/v1/teams
+POST   /api/v1/teams
+GET    /api/v1/teams/{id}
+PATCH  /api/v1/teams/{id}
+DELETE /api/v1/teams/{id}
+GET    /api/v1/teams/{id}/members
+POST   /api/v1/teams/{id}/invitations
+DELETE /api/v1/teams/{id}/members/{userId}
+POST   /api/v1/team-invitations/{id}/accept
+POST   /api/v1/team-invitations/{id}/reject
+16. Tournament Requests
+La comunidad puede solicitar torneos, pero no crearlos directamente.
+GET  /api/v1/tournament-requests
+POST /api/v1/tournament-requests
+GET  /api/v1/tournament-requests/{id}
+POST /api/v1/tournament-requests/{id}/vote
+DELETE /api/v1/tournament-requests/{id}/vote
+Administración:
+GET   /api/v1/admin/tournament-requests
+PATCH /api/v1/admin/tournament-requests/{id}
+POST  /api/v1/admin/tournament-requests/{id}/convert
+La conversión:
+REQUEST
+   ↓
+ADMIN
+   ↓
+TOURNAMENT
+queda registrada mediante:
+TOURNAMENT_REQUEST_TO_TOURNAMENT
+17. Tournaments API
+Público
+GET /api/v1/tournaments
+GET /api/v1/tournaments/{id}
+GET /api/v1/tournaments/{id}/rules
+GET /api/v1/tournaments/{id}/participants
+GET /api/v1/tournaments/{id}/bracket
+Usuario
+POST /api/v1/tournaments/{id}/registrations
+DELETE /api/v1/tournaments/{id}/registrations/me
+GET /api/v1/tournaments/{id}/registrations/me
+Admin
+POST   /api/v1/admin/tournaments
+GET    /api/v1/admin/tournaments
+GET    /api/v1/admin/tournaments/{id}
+PATCH  /api/v1/admin/tournaments/{id}
+DELETE /api/v1/admin/tournaments/{id}
+POST /api/v1/admin/tournaments/{id}/publish
+POST /api/v1/admin/tournaments/{id}/open-registration
+POST /api/v1/admin/tournaments/{id}/close-registration
+POST /api/v1/admin/tournaments/{id}/generate-bracket
+POST /api/v1/admin/tournaments/{id}/start
+POST /api/v1/admin/tournaments/{id}/pause
+POST /api/v1/admin/tournaments/{id}/resume
+POST /api/v1/admin/tournaments/{id}/cancel
+18. Registration API
+GET  /api/v1/tournaments/{id}/registrations
+POST /api/v1/tournaments/{id}/registrations
+GET  /api/v1/tournaments/{id}/registrations/me
+DELETE /api/v1/tournaments/{id}/registrations/me
+Administración:
+POST /api/v1/admin/registrations/{id}/approve
+POST /api/v1/admin/registrations/{id}/reject
+19. Competition API
+Bracket
+GET /api/v1/tournaments/{id}/bracket
+GET /api/v1/tournaments/{id}/stages
+GET /api/v1/tournaments/{id}/rounds
+GET /api/v1/tournaments/{id}/matches
+Match
+GET /api/v1/matches/{id}
+POST /api/v1/matches/{id}/result
+POST /api/v1/matches/{id}/dispute
+GET /api/v1/matches/{id}/dispute
+Administración
+PATCH /api/v1/admin/matches/{id}
+POST  /api/v1/admin/matches/{id}/result/approve
+POST  /api/v1/admin/matches/{id}/result/reject
+POST  /api/v1/admin/matches/{id}/resolve-dispute
+20. Motor de brackets
+Para el MVP recomiendo soportar Single Elimination.
+No intentaría desarrollar inicialmente:
+Double Elimination
+Round Robin
+Swiss
+Groups
+Primero:
+SINGLE ELIMINATION
+y después hacemos que el motor sea extensible.
+21. Diseño del motor
+Crearía:
+BracketGenerator
+BracketValidator
+SeedingService
+ByeService
+MatchAdvancementService
+BracketCompletionService
+Flujo
+GenerateBracket
+       │
+       ▼
+ValidateParticipants
+       │
+       ▼
+CalculateBracketSize
+       │
+       ▼
+GenerateRounds
+       │
+       ▼
+GenerateMatches
+       │
+       ▼
+ConnectMatches
+       │
+       ▼
+AssignSeeds
+       │
+       ▼
+AssignParticipants
+       │
+       ▼
+ProcessByes
+       │
+       ▼
+Persist Transaction
+22. Algoritmo de generación
+Supongamos:
+6 participantes
+Calculamos:
+nextPowerOfTwo(6) = 8
+Entonces:
+8 - 6 = 2 BYES
+Generamos:
+Round 1
+4 matches
+Round 2
+2 matches
+Final
+1 match
+Total:
+7 matches
+La fórmula:
+matches = bracketSize - 1
+Por ejemplo:
+8 participantes → 7 matches
+16 participantes → 15 matches
+32 participantes → 31 matches
+23. Algoritmo de conexión
+Cada partido tendrá:
+next_match_id
+next_match_slot
+Ejemplo:
+M1 ─────┐
+        ├── M5
+M2 ─────┘
+M3 ─────┐
+        ├── M6
+M4 ─────┘
+M5 ─────┐
+        ├── FINAL
+M6 ─────┘
+Base:
+M1 → M5 SLOT 1
+M2 → M5 SLOT 2
+M3 → M6 SLOT 1
+M4 → M6 SLOT 2
+M5 → FINAL SLOT 1
+M6 → FINAL SLOT 2
+24. BYE
+Cuando:
+MATCH
+slot 1 = Participant A
+slot 2 = NULL
+el sistema ejecuta:
+completion_type = BYE
+status = COMPLETED
+winner = Participant A
+y automáticamente:
+advanceWinner()
+25. Avance automático
+La función conceptual:
+advanceWinner(matchId)
+hará:
+1. Buscar match.
+2. Verificar que esté COMPLETED.
+3. Obtener winner.
+4. Verificar next_match_id.
+5. Obtener next_match_slot.
+6. Verificar que slot esté vacío.
+7. Insertar participante.
+8. Evaluar si el siguiente match tiene BYE.
+9. Si corresponde → avanzar nuevamente.
+10. Si no → esperar al segundo participante.
+Esto permite una cadena como:
+BYE
+ ↓
+MATCH COMPLETED
+ ↓
+BYE
+ ↓
+MATCH COMPLETED
+ ↓
+FINAL
+sin intervención administrativa.
+26. Transacciones
+Esto es extremadamente importante.
+La finalización de un partido debe ser:
+@Transactional
+porque necesitamos actualizar simultáneamente:
+MATCH
+MATCH_RESULT
+MATCH_PARTICIPANT
+NEXT_MATCH
+TOURNAMENT_PARTICIPANT
+RANKING
+USER_COMPETITIVE_STATS
+Si falla una operación:
+ROLLBACK
+y no queda el torneo en un estado inconsistente.
+27. Concurrencia del último cupo
+Aquí utilizaría PostgreSQL junto con una transacción.
+Conceptualmente:
+BEGIN
+SELECT tournament
+FOR UPDATE
+verificar cupos
+registrar solicitudes
+resolver prioridad
+confirmar participante
+COMMIT
+El punto importante es que el backend debe bloquear la fila relevante del torneo mientras se resuelve la asignación.
+No confiaría únicamente en:
+SELECT current_participants
+porque dos peticiones simultáneas podrían observar el mismo cupo.
+28. Docker
+Para desarrollo:
+toprival/
+│
+├── frontend/
+│   └── Dockerfile
+│
+├── backend/
+│   └── Dockerfile
+│
+├── database/
+│   └── init/
+│
+├── nginx/
+│   └── nginx.conf
+│
+├── docker-compose.yml
+│
+└── .env
+Arquitectura:
+                     INTERNET
+                        │
+                        ▼
+                    NGINX
+                   /      \
+                  /        \
+                 ▼          ▼
+            FRONTEND      BACKEND
+           Next.js       Spring Boot
+                              │
+                    ┌─────────┼─────────┐
+                    ▼         ▼         ▼
+                PostgreSQL  Redis      MinIO
+29. Docker Compose MVP
+Servicios:
+services:
+  frontend
+  backend
+  postgres
+  redis
+  minio
+  nginx
+En desarrollo podríamos añadir:
+adminer
+para inspeccionar PostgreSQL.
+Pero Adminer no debería existir en producción.
+30. PostgreSQL
+Configuración inicial:
+postgres:16
+Persistencia:
+postgres_data:/var/lib/postgresql/data
+Nunca:
+PostgreSQL sin volumen
+porque perderías la base al recrear el contenedor.
+31. Redis
+Redis tendrá inicialmente tres responsabilidades:
+Cache
+games
+tournaments
+rankings
+Rate limiting
+login
+2FA
+votes
+registrations
+Datos temporales
+Por ejemplo:
+2FA OTP
+verification tokens
+aunque los tokens sensibles pueden manejarse también mediante estructuras específicas con expiración.
+32. Storage
+Para imágenes:
+MinIO
+en desarrollo.
+Producción:
+Amazon S3
+Cloudflare R2
+DigitalOcean Spaces
+Guardaríamos:
+avatars/
+teams/
+games/
+tournaments/
+evidence/
+No recomiendo guardar imágenes directamente dentro de PostgreSQL.
+33. Estructura Docker de producción
+Inicialmente:
+Internet
+   │
+   ▼
+Cloudflare
+   │
+   ▼
+Nginx
+   │
+   ├───────────┐
+   ▼           ▼
+Next.js    Spring Boot
+               │
+       ┌───────┼────────┐
+       ▼       ▼        ▼
+   PostgreSQL Redis     S3
+Cuando crezca:
+                  LOAD BALANCER
+                  /     |      \
+                 /      |       \
+                ▼       ▼        ▼
+             API-1    API-2    API-3
+                \       |       /
+                 \      |      /
+                  ▼     ▼     ▼
+                  PostgreSQL
+                     │
+                  Read Replicas
+34. Escalabilidad futura
+Aquí es donde el diseño de monolito modular nos beneficia.
+No debemos pensar:
+MVP → Microservicios
+sino:
+MVP
+ ↓
+Monolito modular
+ ↓
+Optimización
+ ↓
+Escalamiento horizontal
+ ↓
+Identificación de cuellos de botella
+ ↓
+Extraer módulos específicos
+35. Primera etapa de escalamiento
+Cuando aumenten los usuarios:
+API
+ ├── Instance 1
+ ├── Instance 2
+ └── Instance 3
+Todas ejecutan el mismo backend.
+Necesitaremos:
+Load Balancer
++
+Redis
++
+PostgreSQL
+El backend debe ser stateless.
+Por eso no guardaremos sesiones críticas únicamente en memoria del servidor.
+36. Segunda etapa
+Si TopRival empieza a recibir mucho tráfico:
+                     API
+                      │
+        ┌─────────────┼─────────────┐
+        ▼             ▼             ▼
+   Tournament     Identity      Community
+     Module        Module          Module
+Todavía pueden permanecer dentro del mismo repositorio/aplicación.
+37. Tercera etapa
+Si el motor competitivo se vuelve muy demandante:
+TopRival Core
+      │
+      ├── Users
+      ├── Teams
+      ├── Games
+      └── Tournaments
+             │
+             ▼
+      Competition Service
+             │
+             ├── Brackets
+             ├── Matches
+             ├── Results
+             └── Advancement
+Competition sería uno de los primeros candidatos para separarse.
+38. Event-driven architecture futura
+Más adelante podemos incorporar:
+RabbitMQ / Kafka
+para eventos:
+TournamentCreated
+RegistrationConfirmed
+TournamentStarted
+MatchCompleted
+PlayerAdvanced
+TournamentFinished
+RankingUpdated
+PaymentCompleted
+Por ejemplo:
+MATCH_COMPLETED
+       │
+       ▼
+Event Bus
+   ┌───┼───────────────┐
+   ▼   ▼               ▼
+Ranking Notification Analytics
+Esto evita que el módulo de partidos tenga que ejecutar todo sincrónicamente.
+39. WebSockets
+Para una plataforma competitiva esto será especialmente útil.
+Podemos utilizar:
+WebSocket / STOMP
+para:
+MATCH_UPDATED
+BRACKET_UPDATED
+TOURNAMENT_STARTED
+PLAYER_ADVANCED
+RESULT_SUBMITTED
+Así un usuario que esté viendo el bracket podrá recibir:
+M1 FINALIZADO
+      ↓
+Bracket actualizado
+      ↓
+UI cambia inmediatamente
+sin refrescar la página.
+40. Arquitectura de escalabilidad final
+La evolución ideal sería:
+                  ┌─────────────────┐
+                  │    CLOUDFLARE   │
+                  └────────┬────────┘
+                           │
+                    LOAD BALANCER
+                           │
+             ┌─────────────┼─────────────┐
+             ▼             ▼             ▼
+          API #1         API #2         API #3
+             │             │             │
+             └─────────────┼─────────────┘
+                           │
+                  ┌────────┴────────┐
+                  │                 │
+                  ▼                 ▼
+              PostgreSQL          Redis
+                  │
+           ┌──────┴──────┐
+           ▼             ▼
+        Primary       Replicas
+                    EVENT BUS
+                       │
+          ┌────────────┼─────────────┐
+          ▼            ▼             ▼
+      Rankings     Notifications   Analytics
+41. Lo que NO implementaría todavía
+Para mantener el MVP manejable, dejaría fuera:
+❌ Microservicios
+❌ Kubernetes
+❌ Kafka
+❌ Machine Learning
+❌ App móvil nativa
+❌ Double Elimination
+❌ Swiss
+❌ Sistema complejo de patrocinadores
+❌ Marketplace
+❌ Streaming propio
+❌ Chat global
+No porque no sean buenas ideas, sino porque no son necesarias para validar TopRival.
+42. Arquitectura MVP definitiva
+Por tanto:
+                    TOPRIVAL MVP
+                 Next.js + TypeScript
+                         │
+                         │ REST
+                         ▼
+              Spring Boot Monolith
+                         │
+             ┌───────────┼───────────┐
+             │           │           │
+             ▼           ▼           ▼
+         PostgreSQL    Redis       MinIO
+             │
+             ▼
+        Docker Compose
+Con:
+Clean Architecture
++
+Modular Monolith
++
+REST API
++
+JWT
++
+2FA
++
+PostgreSQL
++
+Redis
++
+Bracket Engine
++
+WebSocket preparado
+Y lo más importante: el dominio competitivo queda desacoplado, por lo que si TopRival alcanza suficiente volumen, podemos extraer Competition sin rehacer toda la plataforma.
+Siguiente paso recomendado
+Ahora sí estamos en un excelente punto para entrar al UX/UI. Pero antes del wireframe completo, haría una etapa intermedia muy útil: definir el mapa de pantallas de TopRival y navegación por rol.
+Quedaría:
+ARQUITECTURA ✅
+       ↓
+API ENDPOINTS ✅
+       ↓
+BRACKET ENGINE ✅
+       ↓
+DOCKER ✅
+       ↓
+ESCALABILIDAD ✅
+       ↓
+MAPA DE PANTALLAS
+       ↓
+USER FLOWS
+       ↓
+WIREFRAME UX
+       ↓
+UI DESIGN
+Ese mapa debería contemplar al menos Jugador, Capitán de equipo y Administrador, además de los estados especiales de un torneo (inscripción, espera, bracket, partido, resultados, disputa y finalización).
+
+--- TABLE ---
+Capa | Tecnología
+Frontend | Next.js + TypeScript
+UI | Tailwind CSS
+Backend | Java + Spring Boot
+Arquitectura | Clean Architecture
+API | REST
+BD | PostgreSQL
+Cache | Redis
+ORM | Spring Data JPA / Hibernate
+Seguridad | Spring Security
+JWT | Access + Refresh Tokens
+2FA | TOTP + Email OTP + SMS
+Documentación API | OpenAPI / Swagger
+Tests | JUnit + Mockito + Testcontainers
+Contenedores | Docker
+Storage | S3 compatible
+CI/CD | GitHub Actions
+Reverse Proxy | Nginx inicialmente
+-------------
+
+
+
+====================================
+FILE: Diagrama entidad-relacion.docx
+====================================
+
+TOPRIVAL — DIAGRAMA ENTIDAD-RELACIÓN DEFINITIVO
+Versión: 1.0
+Motor objetivo: PostgreSQL
+Estado: Diseño conceptual y lógico consolidado
+Enfoque: MVP escalable de plataforma de torneos gamer
+1. DIAGRAMA GENERAL POR DOMINIOS
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           TOPRIVAL DATABASE                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+     ┌───────────────────┐
+     │     IDENTITY      │
+     │                   │
+     │ USERS             │
+     │ PROFILES          │
+     │ ROLES             │
+     │ PERMISSIONS       │
+     └─────────┬─────────┘
+               │
+               │
+     ┌─────────▼─────────┐
+     │     COMMUNITY     │
+     │                   │
+     │ TEAMS             │
+     │ TEAM_MEMBERS      │
+     │ TEAM_INVITATIONS  │
+     │                   │
+     │ TOURNAMENT        │
+     │ REQUESTS          │
+     │ VOTES             │
+     └─────────┬─────────┘
+               │
+               │
+     ┌─────────▼─────────┐
+     │    COMPETITION    │
+     │                   │
+     │ TOURNAMENTS       │
+     │ REGISTRATIONS     │
+     │ PARTICIPANTS      │
+     │ STAGES            │
+     │ ROUNDS            │
+     │ MATCHES           │
+     │ RESULTS           │
+     │ DISPUTES          │
+     └─────────┬─────────┘
+               │
+               │
+     ┌─────────▼─────────┐
+     │    GAMIFICATION   │
+     │                   │
+     │ RANKINGS          │
+     │ RANKING_HISTORY   │
+     │ COMPETITIVE_STATS │
+     └───────────────────┘
+2. MÓDULO DE IDENTIDAD Y SEGURIDAD
+                    ┌───────────────┐
+                    │     USERS     │
+                    ├───────────────┤
+                    │ PK id         │
+                    │ email         │
+                    │ password_hash │
+                    │ status        │
+                    │ verified_at   │
+                    └───────┬───────┘
+                            │
+                    1       │       1
+                            │
+                    ┌───────▼───────┐
+                    │   PROFILES    │
+                    ├───────────────┤
+                    │ PK id         │
+                    │ FK user_id    │
+                    │ nickname      │
+                    │ display_name  │
+                    │ avatar_url    │
+                    └───────────────┘
+      USERS                          ROLES
+        │                              │
+        │                              │
+        └───────────┐      ┌───────────┘
+                    │      │
+                    ▼      ▼
+              ┌──────────────────┐
+              │   USER_ROLES     │
+              ├──────────────────┤
+              │ FK user_id       │
+              │ FK role_id       │
+              └──────────────────┘
+                    │
+                    │
+                    ▼
+                  ROLES
+                    │
+                    │
+                    ▼
+            ┌───────────────────┐
+            │ ROLE_PERMISSIONS  │
+            ├───────────────────┤
+            │ FK role_id        │
+            │ FK permission_id  │
+            └─────────┬─────────┘
+                      │
+                      ▼
+                ┌───────────────┐
+                │  PERMISSIONS  │
+                └───────────────┘
+3. MÓDULO DE VIDEOJUEGOS
+                   ┌──────────────┐
+                   │    GAMES     │
+                   ├──────────────┤
+                   │ PK id        │
+                   │ name         │
+                   │ slug         │
+                   │ status       │
+                   └──────┬───────┘
+                          │
+                     1    │    N
+                          │
+                   ┌──────▼───────┐
+                   │  GAME_MODES  │
+                   ├──────────────┤
+                   │ PK id        │
+                   │ FK game_id   │
+                   │ name         │
+                   │ team_size    │
+                   └──────────────┘
+4. MÓDULO DE EQUIPOS
+                        ┌─────────────┐
+                        │    USERS    │
+                        └──────┬──────┘
+                               │
+                               │
+                               ▼
+                        ┌─────────────┐
+                        │    TEAMS    │
+                        ├─────────────┤
+                        │ PK id       │
+                        │ name        │
+                        │ tag         │
+                        │ FK captain  │
+                        │ status      │
+                        └──────┬──────┘
+                               │
+                      1        │       N
+                               │
+                               ▼
+                      ┌──────────────────┐
+                      │   TEAM_MEMBERS   │
+                      ├──────────────────┤
+                      │ PK id            │
+                      │ FK team_id       │
+                      │ FK user_id       │
+                      │ role             │
+                      │ status           │
+                      └──────────────────┘
+                               │
+                               │
+                               ▼
+                             USERS
+Invitaciones
+       ┌─────────────┐
+       │    TEAMS    │
+       └──────┬──────┘
+              │
+              │
+              ▼
+     ┌──────────────────────┐
+     │   TEAM_INVITATIONS   │
+     ├──────────────────────┤
+     │ PK id                │
+     │ FK team_id           │
+     │ FK invited_user_id   │
+     │ FK invited_by_user   │
+     │ status               │
+     │ expires_at           │
+     └───────────┬──────────┘
+                 │
+                 ▼
+               USERS
+5. SOLICITUDES DE LA COMUNIDAD
+                        ┌───────────────┐
+                        │     USERS     │
+                        └───────┬───────┘
+                                │
+                                │ 1
+                                │
+                                │ N
+                    ┌───────────▼────────────┐
+                    │  TOURNAMENT_REQUESTS   │
+                    ├────────────────────────┤
+                    │ PK id                  │
+                    │ FK created_by          │
+                    │ FK game_id             │
+                    │ FK game_mode_id        │
+                    │ format                 │
+                    │ preferred_date         │
+                    │ preferred_time         │
+                    │ status                 │
+                    └───────────┬────────────┘
+                                │
+                                │
+                       ┌────────┴─────────┐
+                       │                  │
+                       ▼                  ▼
+            ┌───────────────────┐  ┌──────────────────────────────┐
+            │ REQUEST_VOTES     │  │ REQUEST_TO_TOURNAMENT        │
+            ├───────────────────┤  ├──────────────────────────────┤
+            │ FK request_id     │  │ PK id                        │
+            │ FK user_id        │  │ FK request_id                │
+            │ created_at        │  │ FK tournament_id             │
+            └─────────┬─────────┘  │ FK linked_by                  │
+                      │            └──────────────┬───────────────┘
+                      │                           │
+                      ▼                           ▼
+                    USERS                    TOURNAMENTS
+6. NÚCLEO PRINCIPAL DE TORNEOS
+                     ┌───────────────┐
+                     │     GAMES     │
+                     └───────┬───────┘
+                             │
+                             │
+                             ▼
+                   ┌──────────────────┐
+                   │   TOURNAMENTS    │
+                   ├──────────────────┤
+                   │ PK id            │
+                   │ FK game_id       │
+                   │ FK game_mode_id  │
+                   │ FK created_by    │
+                   │ title            │
+                   │ format           │
+                   │ participant_type │
+                   │ max_participants │
+                   │ status           │
+                   └────────┬─────────┘
+                            │
+          ┌─────────────────┼─────────────────┐
+          │                 │                 │
+          ▼                 ▼                 ▼
+ ┌───────────────────┐ ┌──────────────────┐ ┌────────────────────┐
+ │ TOURNAMENT_RULES  │ │  REGISTRATIONS   │ │ TOURNAMENT_STAGES  │
+ ├───────────────────┤ ├──────────────────┤ ├────────────────────┤
+ │ PK id             │ │ PK id            │ │ PK id              │
+ │ FK tournament_id  │ │ FK tournament_id │ │ FK tournament_id   │
+ │ title             │ │ FK user_id       │ │ stage_type         │
+ │ content           │ │ FK team_id       │ │ stage_order        │
+ └───────────────────┘ │ status           │ └─────────┬──────────┘
+                       └────────┬─────────┘           │
+                                │                     │
+                                ▼                     ▼
+                     ┌───────────────────────┐   ┌─────────────────────┐
+                     │ TOURNAMENT_PARTICIPANTS│   │ TOURNAMENT_ROUNDS   │
+                     ├───────────────────────┤   ├─────────────────────┤
+                     │ PK id                 │   │ PK id               │
+                     │ FK tournament_id      │   │ FK stage_id         │
+                     │ FK registration_id    │   │ round_number        │
+                     │ FK user_id            │   └──────────┬──────────┘
+                     │ FK team_id            │              │
+                     │ seed                  │              ▼
+                     │ status                │        ┌─────────────┐
+                     └──────────┬────────────┘        │   MATCHES   │
+                                │                     ├─────────────┤
+                ┌───────────────┴──────────────┐      │ PK id       │
+                │                              │      │ FK stage_id │
+                ▼                              ▼      │ FK round_id │
+       INDIVIDUAL PLAYER             TEAM PARTICIPANT  │ winner_id   │
+                                                       │ next_match  │
+                                                       └──────┬──────┘
+                                                              │
+                                                              ▼
+                                               ┌──────────────────────┐
+                                               │  MATCH_PARTICIPANTS  │
+                                               ├──────────────────────┤
+                                               │ PK id                │
+                                               │ FK match_id          │
+                                               │ FK participant_id    │
+                                               │ slot                 │
+                                               │ score                │
+                                               └──────────────────────┘
+7. PLANTILLA COMPETITIVA CONGELADA
+Cuando un equipo queda oficialmente confirmado:
+                 TEAM
+                   │
+                   │ miembros actuales
+                   ▼
+             TEAM_MEMBERS
+                   │
+                   │ confirmar inscripción
+                   ▼
+      TOURNAMENT_PARTICIPANT
+                   │
+                   │ snapshot
+                   ▼
+┌─────────────────────────────────────┐
+│ TOURNAMENT_PARTICIPANT_MEMBERS      │
+├─────────────────────────────────────┤
+│ PK id                               │
+│ FK tournament_participant_id        │
+│ FK user_id                          │
+│ role                                │
+│ created_at                          │
+└─────────────────────────────────────┘
+Relación:
+TOURNAMENT_PARTICIPANT
+          1
+          │
+          │
+          N
+          ▼
+TOURNAMENT_PARTICIPANT_MEMBERS
+          │
+          │
+          ▼
+        USERS
+8. MOTOR DE BRACKETS
+┌──────────────────────────────────────────────────────────────────┐
+│                         TOURNAMENT_STAGE                         │
+│                                                                  │
+│                SINGLE_ELIMINATION                               │
+└────────────────────────────┬─────────────────────────────────────┘
+                             │
+                             ▼
+                      TOURNAMENT_ROUNDS
+                             │
+                ┌────────────┴────────────┐
+                │                         │
+                ▼                         ▼
+             ROUND 1                    ROUND 2
+                │                         │
+       ┌────────┴────────┐        ┌───────┴────────┐
+       ▼                 ▼        ▼                ▼
+    MATCH 1           MATCH 2    MATCH 5        MATCH 6
+       │                 │         │              │
+       └────────┐   ┌────┘         └──────┐ ┌─────┘
+                ▼   ▼                     ▼ ▼
+                  NEXT MATCH
+                       │
+                       ▼
+                     FINAL
+Relación física
+MATCH
+│
+├── id
+│
+├── next_match_id
+│
+└── next_match_slot
+Ejemplo:
+MATCH 1
+next_match_id = MATCH 5
+next_match_slot = 1
+MATCH 2
+next_match_id = MATCH 5
+next_match_slot = 2
+9. LÓGICA DE BYE
+                 MATCH
+                   │
+        ┌──────────┴──────────┐
+        │                     │
+        ▼                     ▼
+ SLOT 1 CON          SLOT 2 VACÍO
+ PARTICIPANTE
+        │
+        │
+        ▼
+     BYE DETECTED
+        │
+        ▼
+COMPLETION_TYPE = BYE
+        │
+        ▼
+MATCH = COMPLETED
+        │
+        ▼
+GANADOR AVANZA
+El sistema no crea un participante falso llamado BYE.
+El BYE se determina por la existencia de:
+1 PARTICIPANTE
++
+1 SLOT VACÍO
+10. RESULTADOS Y DISPUTAS
+                         MATCHES
+                            │
+                ┌───────────┴────────────┐
+                │                        │
+                ▼                        ▼
+        MATCH_RESULTS              MATCH_DISPUTES
+                │                        │
+                │                        │
+                ▼                        ▼
+           REPORTED                   OPEN
+                │                        │
+                ▼                        ▼
+          CONFIRMED              UNDER_REVIEW
+                │                        │
+                ▼                        ▼
+           APPROVED                RESOLVED
+                │
+                ▼
+        MATCH COMPLETED
+11. RANKINGS Y GAMIFICACIÓN
+                    USERS
+                      │
+                      │
+                      ▼
+                 RANKINGS
+                      │
+          ┌───────────┼───────────┐
+          │                       │
+          ▼                       ▼
+        GAMES               RANKING_HISTORY
+RANKINGS
+──────────────────────
+user_id
+game_id
+points
+wins
+losses
+tournaments_played
+12. ESTADÍSTICAS DE RECURRENCIA
+                    USERS
+                      │
+                      │ 1
+                      │
+                      │ 1
+                      ▼
+        USER_COMPETITIVE_STATS
+        ───────────────────────
+        user_id
+        tournaments_played
+        tournaments_finished
+        wins
+        losses
+        priority_score
+Uso:
+INSCRIPCIONES CONCURRENTES
+          │
+          ▼
+CONSULTAR PRIORITY_SCORE
+          │
+          ▼
+ORDENAR PRIORIDAD
+          │
+          ▼
+ASIGNAR ÚLTIMO CUPO
+13. PAGOS Y MONETIZACIÓN
+             USERS
+               │
+               ▼
+             PAYMENTS
+               │
+               ▼
+     TOURNAMENT_REGISTRATIONS
+               │
+               ▼
+           TOURNAMENT
+La relación permite posteriormente manejar:
+Pago de inscripción.
+Pago pendiente.
+Pago aprobado.
+Reembolso.
+Fallo.
+Comisiones.
+14. AUDITORÍA
+                        USERS
+                          │
+                          ▼
+                      AUDIT_LOGS
+AUDIT_LOGS
+─────────────────────────────
+id
+actor_user_id
+action
+entity_type
+entity_id
+before_data
+after_data
+ip_address
+created_at
+15. DIAGRAMA ER INTEGRADO
+┌──────────┐       ┌──────────┐
+│  USERS   │──────▶│ PROFILES │
+└────┬─────┘       └──────────┘
+     │
+     ├──────────────▶ USER_ROLES ◀────── ROLES
+     │                                     │
+     │                                     ▼
+     │                            ROLE_PERMISSIONS
+     │                                     │
+     │                                     ▼
+     │                                PERMISSIONS
+     │
+     ├──────────────▶ TEAM_MEMBERS ◀────── TEAMS
+     │                                      │
+     ├──────────────▶ TEAM_INVITATIONS ◀────┘
+     │
+     ├──────────────▶ USER_COMPETITIVE_STATS
+     │
+     ├──────────────▶ TOURNAMENT_REQUESTS
+     │                     │
+     │                     ├──────────▶ REQUEST_VOTES
+     │                     │
+     │                     └──────────▶ REQUEST_TO_TOURNAMENT
+     │                                      │
+     │                                      ▼
+     │                                TOURNAMENTS
+     │                                      │
+     │                         ┌────────────┼─────────────┐
+     │                         │            │             │
+     │                         ▼            ▼             ▼
+     │                       RULES    REGISTRATIONS     STAGES
+     │                                      │             │
+     │                                      ▼             ▼
+     │                                PARTICIPANTS     ROUNDS
+     │                                      │             │
+     │                                      │             ▼
+     │                                      │           MATCHES
+     │                                      │             │
+     │                           ┌──────────┘             ├──── RESULTS
+     │                           ▼                        │
+     │              PARTICIPANT_MEMBERS                   ├──── DISPUTES
+     │                                                    │
+     │                                                    ▼
+     │                                             MATCH_PARTICIPANTS
+     │                                                    │
+     └────────────────────────────────────────────────────┘
+┌──────────┐
+│  GAMES   │──────▶ GAME_MODES
+│     │
+│     ├────────────▶ TOURNAMENTS
+│     │
+│     └────────────▶ RANKINGS
+└──────────┘
+                     │
+                     ▼
+               RANKING_HISTORY
+16. RELACIONES DEFINITIVAS
+USERS
+├── 1:1 PROFILES
+├── N:M ROLES
+├── 1:N TEAM_MEMBERS
+├── 1:N TEAM_INVITATIONS
+├── 1:1 USER_COMPETITIVE_STATS
+├── 1:N TOURNAMENT_REQUESTS
+├── N:M TOURNAMENT_REQUEST_VOTES
+├── 1:N TOURNAMENT_REGISTRATIONS
+├── 1:N RANKINGS
+└── 1:N AUDIT_LOGS
+GAMES
+├── 1:N GAME_MODES
+├── 1:N TOURNAMENTS
+└── 1:N RANKINGS
+TEAMS
+├── 1:N TEAM_MEMBERS
+├── 1:N TEAM_INVITATIONS
+└── 1:N TOURNAMENT_REGISTRATIONS
+TOURNAMENTS
+├── 1:N TOURNAMENT_RULES
+├── 1:N TOURNAMENT_REGISTRATIONS
+├── 1:N TOURNAMENT_PARTICIPANTS
+├── 1:N TOURNAMENT_STAGES
+└── N:M TOURNAMENT_REQUESTS
+TOURNAMENT_REGISTRATIONS
+├── 1:0..1 TOURNAMENT_PARTICIPANTS
+└── 1:N PAYMENTS
+TOURNAMENT_PARTICIPANTS
+├── 1:N MATCH_PARTICIPANTS
+└── 1:N TOURNAMENT_PARTICIPANT_MEMBERS
+TOURNAMENT_STAGES
+├── 1:N TOURNAMENT_ROUNDS
+└── 1:N MATCHES
+TOURNAMENT_ROUNDS
+└── 1:N MATCHES
+MATCHES
+├── 1:N MATCH_PARTICIPANTS
+├── 1:0..1 MATCH_RESULTS
+├── 1:N MATCH_DISPUTES
+└── 0..1:N NEXT_MATCHES
+RANKINGS
+└── 1:N RANKING_HISTORY
+17. DECISIÓN TÉCNICA FINAL DEL ER
+El núcleo competitivo definitivo queda representado así:
+                    TOURNAMENT
+                         │
+                         ▼
+                  REGISTRATION
+                         │
+                         ▼
+                   PARTICIPANT
+                    /         \
+                   /           \
+              PLAYER            TEAM
+                                  │
+                                  ▼
+                        FROZEN ROSTER
+                                  │
+                                  ▼
+STAGE → ROUND → MATCH → RESULT → WINNER → NEXT MATCH
+18. ESTADO DEL DISEÑO
+✓ Modelo de negocio definido
+✓ Usuarios objetivo definidos
+✓ MVP definido
+✓ Requisitos funcionales
+✓ Requisitos no funcionales
+✓ Casos de uso
+✓ Máquinas de estado
+✓ Modelo ER
+✓ Reglas críticas
+✓ Concurrencia
+✓ Plantillas congeladas
+✓ BYE
+✓ Avance automático
+✓ Diagrama ER definitivo
+19. PRÓXIMA FASE
+Con el diseño de datos cerrado, el siguiente proceso recomendado es:
+DIAGRAMA ER
+      ↓
+ARQUITECTURA DEL SISTEMA
+      ↓
+ARQUITECTURA BACKEND
+      ↓
+API DESIGN
+      ↓
+WIREWIRES UX
+      ↓
+UI DESIGN
+      ↓
+BASE DE DATOS
+      ↓
+IMPLEMENTACIÓN MVP
+La siguiente etapa técnica debe definir cómo se conectarán los componentes de TopRival y cómo organizar el código.
+Se recomienda continuar con la arquitectura completa de:
+Frontend.
+Backend.
+Base de datos.
+Autenticación.
+API.
+Almacenamiento de archivos.
+Servicios futuros.
+Comunicación en tiempo real.
+Docker.
+Despliegue.
+
+
+====================================
+FILE: Modelo ER.docx
+====================================
+
+TOPRIVAL
+Especificación de Casos de Uso y Criterios de Aceptación
+Versión: 1.0
+Estado: Especificación funcional del MVP
+Producto: Plataforma web de torneos gamer
+1. OBJETIVO
+Este documento define los principales casos de uso del MVP de TopRival.
+Cada caso de uso establece:
+Actor.
+Objetivo.
+Precondiciones.
+Flujo principal.
+Flujos alternativos.
+Resultado esperado.
+Criterios de aceptación.
+Estos casos de uso servirán como base para:
+Wireframes.
+Diseño UX/UI.
+Endpoints.
+Desarrollo backend.
+Desarrollo frontend.
+Pruebas.
+Historias de usuario.
+2. ACTORES DEL SISTEMA
+PLAYER
+Usuario registrado que participa en la plataforma.
+Puede:
+Gestionar su perfil.
+Crear equipos.
+Unirse a equipos.
+Inscribirse en torneos.
+Participar en partidos.
+Solicitar torneos.
+Votar solicitudes.
+TEAM_CAPTAIN
+Jugador con permisos administrativos sobre un equipo.
+Puede:
+Gestionar miembros.
+Inscribir equipos.
+Representar al equipo en torneos.
+Gestionar determinadas acciones competitivas.
+MODERATOR
+Usuario encargado de apoyar la operación competitiva.
+Puede:
+Revisar reportes.
+Gestionar disputas.
+Moderar contenido.
+Aplicar sanciones autorizadas.
+ADMIN
+Usuario encargado de gestionar la plataforma.
+Puede:
+Gestionar torneos.
+Gestionar videojuegos.
+Gestionar modalidades.
+Gestionar inscripciones.
+Generar brackets.
+Gestionar partidos.
+Resolver disputas.
+Analizar solicitudes.
+3. CASOS DE USO
+CU-01 — Registrar usuario
+Actor principal
+Visitante.
+Objetivo
+Crear una cuenta para utilizar TopRival.
+Precondiciones
+El usuario no debe tener una cuenta registrada con el mismo correo.
+El nickname no debe estar ocupado.
+Flujo principal
+1. El visitante accede al formulario de registro.
+2. Ingresa correo electrónico.
+3. Ingresa nickname.
+4. Ingresa contraseña.
+5. Confirma la contraseña.
+6. Envía el formulario.
+7. El sistema valida la información.
+8. El sistema crea la cuenta.
+9. El sistema solicita verificar el correo.
+10. El usuario verifica su correo.
+11. La cuenta queda habilitada.
+Flujos alternativos
+Correo existente
+Correo ya registrado
+        ↓
+Mostrar mensaje
+        ↓
+No crear cuenta
+Nickname ocupado
+Nickname ocupado
+        ↓
+Mostrar mensaje
+        ↓
+Solicitar otro nickname
+Contraseña inválida
+Contraseña no cumple requisitos
+        ↓
+Mostrar requisitos
+        ↓
+No crear cuenta
+Resultado
+Usuario registrado correctamente.
+Criterios de aceptación
+El correo debe ser único.
+El nickname debe ser único.
+La contraseña debe almacenarse mediante hash.
+El sistema no debe exponer información sensible.
+El usuario debe recibir una confirmación.
+La cuenta debe quedar asociada inicialmente al rol PLAYER.
+CU-02 — Iniciar sesión
+Actor principal
+PLAYER.
+Objetivo
+Acceder a su cuenta.
+Flujo principal
+1. Usuario accede al login.
+2. Ingresa correo.
+3. Ingresa contraseña.
+4. Envía formulario.
+5. Sistema valida credenciales.
+6. Sistema autentica usuario.
+7. Sistema crea sesión.
+8. Usuario es redirigido a la plataforma.
+Flujos alternativos
+Credenciales incorrectas
+Credenciales inválidas
+        ↓
+Mostrar mensaje
+        ↓
+No iniciar sesión
+Cuenta bloqueada
+Usuario bloqueado
+        ↓
+Denegar acceso
+        ↓
+Mostrar información correspondiente
+Criterios de aceptación
+Las rutas protegidas deben requerir autenticación.
+La autorización debe validarse en backend.
+La sesión debe poder finalizar.
+Las credenciales nunca deben almacenarse en texto plano.
+CU-03 — Gestionar perfil
+Actor principal
+PLAYER.
+Objetivo
+Actualizar su identidad dentro de la plataforma.
+Flujo principal
+1. Usuario accede a su perfil.
+2. Modifica información.
+3. Guarda cambios.
+4. Sistema valida información.
+5. Sistema actualiza perfil.
+6. Usuario visualiza cambios.
+Datos editables
+Nombre visible.
+Avatar.
+Biografía.
+País.
+Ciudad.
+Restricción
+El nickname no podrá modificarse inicialmente desde el perfil durante el MVP.
+Esto podrá modificarse posteriormente.
+Criterios de aceptación
+Un usuario solo puede editar su propio perfil.
+Los datos deben validarse.
+La actualización debe ser inmediata después de guardarse.
+CU-04 — Crear equipo
+Actor principal
+PLAYER.
+Objetivo
+Crear un equipo para participar en torneos.
+Precondiciones
+Usuario autenticado.
+El usuario no debe estar bloqueado.
+Flujo principal
+1. Usuario accede a "Mis equipos".
+2. Selecciona "Crear equipo".
+3. Ingresa nombre.
+4. Ingresa tag.
+5. Envía formulario.
+6. Sistema valida datos.
+7. Sistema crea equipo.
+8. Sistema asigna al usuario como capitán.
+Resultado
+Equipo creado correctamente.
+Criterios de aceptación
+El creador debe quedar como CAPTAIN.
+El nombre debe cumplir las reglas establecidas.
+El tag debe cumplir las reglas establecidas.
+El sistema debe impedir inconsistencias de membresía.
+CU-05 — Invitar jugador a un equipo
+Actor principal
+TEAM_CAPTAIN.
+Objetivo
+Invitar a un jugador a su equipo.
+Flujo principal
+CAPITÁN
+   ↓
+Selecciona jugador
+   ↓
+Envía invitación
+   ↓
+JUGADOR RECIBE INVITACIÓN
+   ↓
+ACEPTA
+   ↓
+TEAM_MEMBER ACTIVO
+Flujos alternativos
+Jugador rechaza invitación.
+Jugador ya pertenece al equipo.
+Equipo alcanzó el límite configurado.
+Criterios de aceptación
+Solo el capitán puede enviar invitaciones.
+Un jugador no puede ser agregado dos veces.
+La invitación debe poder ser aceptada o rechazada.
+CU-06 — Solicitar torneo
+Actor principal
+PLAYER.
+Objetivo
+Solicitar a TopRival la organización de un torneo.
+Flujo principal
+1. Usuario accede a solicitudes.
+2. Selecciona videojuego.
+3. Selecciona modalidad.
+4. Selecciona formato.
+5. Indica fecha preferida.
+6. Indica horario.
+7. Agrega comentario opcional.
+8. Envía solicitud.
+9. Sistema valida.
+10. Sistema registra solicitud.
+11. Solicitud queda visible para votación.
+Criterios de aceptación
+Solo usuarios autenticados pueden solicitar.
+El usuario no crea un torneo oficial.
+La solicitud debe quedar en estado ACTIVE.
+La solicitud debe quedar asociada al usuario creador.
+CU-07 — Votar por solicitud
+Actor principal
+PLAYER.
+Objetivo
+Apoyar la creación de un torneo solicitado por la comunidad.
+Flujo principal
+1. Usuario consulta solicitudes.
+2. Selecciona solicitud.
+3. Presiona "Apoyar torneo".
+4. Sistema valida que no haya votado.
+5. Sistema registra voto.
+6. Sistema actualiza contador.
+Flujo alternativo
+Usuario ya votó
+     ↓
+Sistema retira voto
+     ↓
+Actualiza contador
+Criterios de aceptación
+Solo un voto activo por usuario y solicitud.
+El usuario debe poder retirar su voto.
+No se puede votar una solicitud cerrada.
+CU-08 — Crear torneo
+Actor principal
+ADMIN.
+Objetivo
+Crear un torneo oficial en la plataforma.
+Flujo principal
+1. Admin accede al panel.
+2. Selecciona crear torneo.
+3. Ingresa información.
+4. Configura videojuego.
+5. Configura modalidad.
+6. Configura tipo de participante.
+7. Configura formato.
+8. Configura cupos.
+9. Configura fechas.
+10. Configura reglas.
+11. Guarda torneo.
+12. Sistema crea torneo en estado DRAFT.
+Criterios de aceptación
+Solo usuarios autorizados pueden crear torneos.
+El torneo debe crearse inicialmente en DRAFT.
+No debe ser público antes de su publicación.
+Los datos obligatorios deben validarse.
+CU-09 — Publicar torneo
+Actor principal
+ADMIN.
+Precondiciones
+Torneo existente.
+Estado DRAFT.
+Configuración obligatoria completa.
+Flujo principal
+ADMIN
+  ↓
+Selecciona torneo
+  ↓
+Publicar
+  ↓
+Sistema valida configuración
+  ↓
+Estado cambia a PUBLISHED
+Criterios de aceptación
+Solo puede publicarse un torneo válido.
+Un torneo publicado debe ser visible públicamente.
+La acción debe registrarse en auditoría.
+CU-10 — Inscribirse a un torneo individual
+Actor principal
+PLAYER.
+Flujo principal
+1. Usuario consulta torneo.
+2. Selecciona inscribirse.
+3. Sistema valida requisitos.
+4. Sistema crea registro.
+5. Inscripción queda PENDING.
+6. Admin o sistema confirma.
+7. Se crea participante.
+Validaciones
+Inscripciones abiertas.
+Cupos disponibles.
+Usuario no inscrito.
+Usuario cumple requisitos.
+Criterios de aceptación
+No permitir inscripción duplicada.
+No permitir inscripción fuera de fecha.
+No permitir superar cupos.
+CU-11 — Inscribir equipo a un torneo
+Actor principal
+TEAM_CAPTAIN.
+Flujo principal
+1. Capitán consulta torneo.
+2. Selecciona inscribir equipo.
+3. Selecciona equipo.
+4. Sistema valida equipo.
+5. Sistema crea inscripción.
+6. Inscripción queda pendiente.
+Validaciones
+El usuario debe ser capitán.
+El equipo debe cumplir tamaño mínimo.
+El equipo no debe estar inscrito.
+Los miembros deben cumplir reglas.
+Criterios de aceptación
+Solo el capitán puede realizar la inscripción.
+No se debe permitir inscripción duplicada del equipo.
+CU-12 — Validar inscripción
+Actor principal
+ADMIN.
+Flujo principal
+Inscripción PENDING
+        ↓
+ADMIN REVISA
+        ↓
+CONFIRMED
+        ↓
+Crear TOURNAMENT_PARTICIPANT
+Alternativas
+PENDING
+   ↓
+REJECTED
+Criterios de aceptación
+Una inscripción confirmada genera un participante.
+Una inscripción rechazada no genera participante.
+La acción debe quedar registrada.
+CU-13 — Generar bracket
+Actor principal
+ADMIN.
+Precondiciones
+Inscripciones cerradas.
+Participantes confirmados.
+Número válido de participantes.
+Flujo principal
+1. Admin selecciona generar bracket.
+2. Sistema obtiene participantes.
+3. Admin selecciona tipo de seeding.
+4. Sistema determina estructura.
+5. Sistema genera rondas.
+6. Sistema crea partidos.
+7. Sistema asigna participantes.
+8. Sistema guarda estructura.
+Criterios de aceptación
+Solo puede existir un bracket activo por etapa.
+No se deben perder participantes.
+Los BYE deben avanzar automáticamente.
+Los partidos deben quedar correctamente enlazados.
+CU-14 — Consultar bracket
+Actor principal
+VISITOR / PLAYER.
+Flujo principal
+Usuario
+   ↓
+Accede al torneo
+   ↓
+Selecciona bracket
+   ↓
+Sistema obtiene estructura
+   ↓
+Muestra rondas y partidos
+Criterios de aceptación
+El bracket debe ser público si el torneo es público.
+Los resultados deben reflejar el estado oficial.
+Debe actualizarse cuando se confirman partidos.
+CU-15 — Reportar resultado
+Actor principal
+PLAYER / TEAM_CAPTAIN.
+Precondiciones
+Usuario participa en el partido.
+Partido finalizado o preparado para reporte.
+Flujo principal
+1. Usuario accede al partido.
+2. Selecciona reportar resultado.
+3. Ingresa marcador.
+4. Selecciona ganador.
+5. Adjunta evidencia si es requerida.
+6. Envía resultado.
+7. Sistema valida.
+8. Crea resultado REPORTED.
+9. Partido queda RESULT_PENDING.
+Criterios de aceptación
+El usuario debe ser participante autorizado.
+El ganador debe corresponder al marcador.
+No debe existir un resultado oficial previo.
+CU-16 — Confirmar resultado
+Actor principal
+PLAYER / TEAM_CAPTAIN.
+Flujo principal
+RESULTADO REPORTADO
+       ↓
+RIVAL REVISA
+       ↓
+CONFIRMAR
+       ↓
+RESULTADO CONFIRMED
+       ↓
+PARTIDO COMPLETED
+       ↓
+AVANCE AUTOMÁTICO
+Criterios de aceptación
+El usuario que reportó no puede confirmar su propio resultado.
+Solo el rival puede confirmar.
+Una confirmación debe registrar fecha y usuario.
+CU-17 — Disputar resultado
+Actor principal
+PLAYER / TEAM_CAPTAIN.
+Flujo principal
+RESULTADO REPORTADO
+        ↓
+RIVAL RECHAZA
+        ↓
+CREA DISPUTA
+        ↓
+PARTIDO DISPUTED
+Criterios de aceptación
+La disputa debe incluir motivo.
+Debe poder incluir evidencia.
+Debe bloquear el avance automático.
+CU-18 — Resolver disputa
+Actor principal
+MODERATOR / ADMIN.
+Flujo principal
+DISPUTA OPEN
+      ↓
+Revisión
+      ↓
+Decisión
+      ↓
+Resultado oficial
+      ↓
+Disputa RESOLVED
+      ↓
+Partido COMPLETED
+Decisiones posibles
+Aprobar resultado.
+Modificar resultado.
+Declarar ganador.
+Reprogramar.
+Invalidar.
+Criterios de aceptación
+Debe quedar registrado el responsable.
+Debe quedar registrada la resolución.
+La resolución debe quedar asociada a la disputa.
+CU-19 — Avance automático
+Actor principal
+SYSTEM.
+Flujo principal
+PARTIDO COMPLETED
+        ↓
+OBTENER GANADOR
+        ↓
+BUSCAR NEXT_MATCH
+        ↓
+ASIGNAR SLOT
+        ↓
+ACTUALIZAR SIGUIENTE PARTIDO
+Criterios de aceptación
+El ganador no debe duplicarse.
+No debe sobrescribir otro participante.
+La operación debe ser transaccional.
+Debe ser idempotente.
+CU-20 — Finalizar torneo
+Actor principal
+ADMIN / SYSTEM.
+Flujo principal
+FINAL COMPLETED
+       ↓
+IDENTIFICAR CAMPEÓN
+       ↓
+MARCAR TOURNAMENT_PARTICIPANT COMO WINNER
+       ↓
+ACTUALIZAR RANKING
+       ↓
+TORNEO FINISHED
+Criterios de aceptación
+El campeón debe ser único.
+Los rankings deben actualizarse correctamente.
+El torneo no debe finalizar con partidos pendientes.
+CU-21 — Consultar ranking
+Actor principal
+VISITANTE / PLAYER.
+Flujo principal
+Usuario
+   ↓
+Selecciona videojuego
+   ↓
+Sistema consulta ranking
+   ↓
+Muestra jugadores ordenados por puntos
+Criterios de aceptación
+Debe existir un ranking por videojuego.
+La información debe ser pública.
+Debe poder consultarse la posición de un jugador.
+CU-22 — Gestionar solicitud comunitaria
+Actor principal
+ADMIN.
+Flujo principal
+ADMIN
+  ↓
+Consulta solicitudes populares
+  ↓
+Analiza demanda
+  ↓
+Selecciona acción
+Acciones
+Mantener activa.
+Seleccionar.
+Rechazar.
+Expirar.
+Criterio importante
+Cuando una solicitud genere un torneo real:
+TOURNAMENT_REQUEST
+        ↓
+SELECTED
+        ↓
+ADMIN CREA TOURNAMENT
+        ↓
+TOURNAMENT_CREATED
+Debe existir trazabilidad entre la solicitud y el torneo cuando corresponda.
+CU-23 — Consultar panel administrativo
+Actor principal
+ADMIN.
+El panel debe mostrar inicialmente:
+Torneos activos.
+Inscripciones pendientes.
+Disputas abiertas.
+Solicitudes populares.
+Usuarios registrados.
+Futuro
+Ingresos.
+Conversión.
+Retención.
+Juegos más rentables.
+Métricas de demanda.
+CU-24 — Auditoría administrativa
+Actor principal
+SYSTEM.
+El sistema debe registrar:
+QUIÉN
+   ↓
+HIZO QUÉ
+   ↓
+SOBRE QUÉ
+   ↓
+CUÁNDO
+Ejemplo:
+ADMIN_01
+   ↓
+MODIFICÓ RESULTADO
+   ↓
+MATCH_104
+   ↓
+2026-08-30 18:30
+4. FLUJO CENTRAL DEL MVP
+REGISTRO
+   ↓
+LOGIN
+   ↓
+EXPLORAR TORNEOS
+   ↓
+DETALLE
+   ↓
+INSCRIPCIÓN
+   ↓
+VALIDACIÓN
+   ↓
+PARTICIPANTE
+   ↓
+BRACKET
+   ↓
+PARTIDO
+   ↓
+REPORTE
+   ↓
+CONFIRMACIÓN
+   ↓
+AVANCE
+   ↓
+FINAL
+   ↓
+RANKING
+5. AJUSTES TÉCNICOS APLICADOS
+5.1 Idempotencia
+Las operaciones críticas deben ser idempotentes.
+Ejemplo:
+Confirmar resultado
+        ↓
+Si ya está confirmado
+        ↓
+No volver a avanzar ganador
+Esto evita errores por:
+Doble clic.
+Reintentos.
+Peticiones duplicadas.
+5.2 Transacciones
+Deben utilizarse transacciones en:
+Confirmación de inscripción.
+Generación de bracket.
+Confirmación de resultados.
+Avance automático.
+Finalización del torneo.
+Actualización de rankings.
+5.3 Bloqueo de operaciones críticas
+Para evitar condiciones de carrera, operaciones como:
+INSCRIPCIÓN
+CONFIRMACIÓN DE RESULTADO
+ASIGNACIÓN DEL GANADOR
+deben protegerse contra modificaciones simultáneas.
+5.4 Auditoría
+Las acciones administrativas deben registrar:
+Actor.
+Acción.
+Entidad.
+Estado anterior.
+Estado nuevo.
+Fecha.
+5.5 Separación de responsabilidades
+La lógica debe mantenerse así:
+CONTROLLER
+    ↓
+SERVICE
+    ↓
+DOMAIN LOGIC
+    ↓
+REPOSITORY
+Los controladores no deben contener reglas complejas.
+6. PRIORIDAD DE IMPLEMENTACIÓN
+P0 — Obligatorio
+CU-01 a CU-03.
+CU-06 a CU-16.
+CU-19.
+CU-20.
+CU-21.
+CU-22.
+P1
+CU-04.
+CU-05.
+CU-11.
+CU-17.
+CU-18.
+CU-23.
+CU-24.
+Esto permite construir primero:
+JUGADOR INDIVIDUAL
+       ↓
+TORNEO
+       ↓
+BRACKET
+       ↓
+COMPETICIÓN
+y posteriormente:
+EQUIPOS
+DISPUTAS AVANZADAS
+ADMINISTRACIÓN
+7. PREPARACIÓN PARA FUTURAS VERSIONES
+El MVP debe evitar bloquear las siguientes evoluciones:
+MVP
+ │
+ ├── PAGOS
+ ├── PATROCINADORES
+ ├── PREMIOS
+ ├── STREAMING
+ ├── DOBLE ELIMINACIÓN
+ ├── GRUPOS
+ ├── RANKINGS AVANZADOS
+ ├── TEMPORADAS
+ ├── CLASIFICATORIOS
+ ├── APP MÓVIL
+ └── NOTIFICACIONES EN TIEMPO REAL
+8. DEFINICIÓN FUNCIONAL DEL MVP
+TopRival MVP estará funcionalmente completo cuando permita:
+ADMIN CREA TORNEO
+        ↓
+USUARIOS SE INSCRIBEN
+        ↓
+ADMIN CONFIRMA PARTICIPANTES
+        ↓
+SISTEMA GENERA BRACKET
+        ↓
+USUARIOS JUEGAN
+        ↓
+RESULTADOS SE VALIDAN
+        ↓
+GANADORES AVANZAN
+        ↓
+TORNEO FINALIZA
+        ↓
+RANKINGS SE ACTUALIZAN
+La comunidad complementará el modelo mediante:
+SOLICITUDES
+      +
+VOTACIONES
+      +
+ANÁLISIS DE DEMANDA
+      =
+FUTUROS TORNEOS
+
+
+====================================
+FILE: Plataforma torneos gamer.docx
+====================================
+
+🎮 Concepto general de la plataforma
+Propuesta central
+Una plataforma centralizada de torneos gamer donde los jugadores pueden descubrir, solicitar, inscribirse y competir en torneos oficiales organizados y gestionados directamente por la plataforma.
+La plataforma se encarga de:
+Crear los torneos.
+Definir las reglas.
+Abrir inscripciones.
+Gestionar los pagos.
+Crear brackets.
+Administrar resultados.
+Resolver disputas.
+Entregar premios.
+Construir rankings.
+Analizar la demanda de la comunidad.
+Los usuarios pueden:
+Registrarse.
+Crear equipos.
+Inscribirse.
+Competir.
+Consultar rankings.
+Solicitar próximos torneos.
+Votar por torneos propuestos.
+Sugerir fechas y horarios.
+Reportar problemas.
+1. Modelo de negocio completo
+Modelo principal: Plataforma de torneos oficiales
+La empresa funciona como el organizador central.
+                    ┌────────────────────┐
+                    │    PLATAFORMA      │
+                    │    ORGANIZADORA    │
+                    └─────────┬──────────┘
+                              │
+             ┌────────────────┼────────────────┐
+             │                │                │
+         CREA             GESTIONA          MONETIZA
+         TORNEOS           EVENTOS          TORNEOS
+No cualquier usuario puede crear torneos.
+Esto permite:
+Mayor control.
+Mejor reputación.
+Mayor calidad.
+Mejor monetización.
+Menos fraude.
+Reglas estandarizadas.
+2. Fuentes de ingresos
+💰 1. Inscripciones pagas
+El modelo principal.
+Ejemplo:
+Inscripción:
+$15.000 COP
+Jugadores:
+100
+Recaudo:
+$1.500.000 COP
+El dinero se distribuye entre:
+PREMIOS
+COSTOS OPERATIVOS
+GANANCIA DE LA PLATAFORMA
+Ejemplo:
+Con el tiempo podrías tener reglas variables según el torneo.
+🏆 2. Torneos Premium
+Torneos con:
+Mayor premio.
+Mayor reconocimiento.
+Clasificación especial.
+Requisitos especiales.
+Ejemplo:
+COPA NACIONAL VALORANT
+Inscripción:
+$30.000
+Premio:
+$5.000.000
+🎯 3. Patrocinios
+Las marcas pueden patrocinar:
+Torneos.
+Equipos.
+Transmisiones.
+Premios.
+Rankings.
+Ejemplo:
+COPA GAMER
+Presentada por:
+[ MARCA PATROCINADORA ]
+Ingresos por:
+Logo.
+Banners.
+Menciones.
+Integración de marca.
+Promoción en redes sociales.
+📺 4. Publicidad
+Cuando la plataforma tenga tráfico:
+Banners.
+Publicidad en transmisiones.
+Espacios promocionales.
+Productos patrocinados.
+Yo no usaría publicidad agresiva al inicio.
+👑 5. Membresía Premium
+Esto sería una monetización secundaria.
+Usuario gratuito
+Participación normal.
+Perfil.
+Ranking.
+Inscripción a torneos.
+Usuario Premium
+Por ejemplo:
+$14.900 COP / mes
+Beneficios:
+Inscripción prioritaria.
+Descuentos.
+Insignia especial.
+Estadísticas avanzadas.
+Acceso anticipado a torneos.
+Mayor prioridad en cupos.
+🔥 6. Torneos exclusivos
+Torneos con acceso por:
+Invitación.
+Ranking.
+Membresía.
+Clasificación previa.
+Esto genera prestigio.
+3. Propuesta de valor
+Para los jugadores
+Participar en competencias gamer organizadas de manera profesional, con reglas claras, brackets automatizados, premios, rankings y una experiencia competitiva centralizada.
+Problemas que resuelves:
+Torneos mal organizados.
+Información dispersa.
+Uso excesivo de WhatsApp.
+Falta de horarios claros.
+Problemas con resultados.
+Falta de premios confiables.
+Dificultad para encontrar competencias.
+Para la plataforma
+Controlar completamente la calidad, monetización y operación de los torneos.
+Esto es importante.
+En lugar de depender de que terceros organicen torneos, tú controlas:
+CALIDAD
+↓
+REPUTACIÓN
+↓
+COMUNIDAD
+↓
+CONFIANZA
+↓
+INGRESOS
+4. Usuarios objetivo
+👤 Usuario principal: Gamer competitivo
+Edad aproximada:
+16 - 35 años
+Características:
+Juega videojuegos competitivos.
+Busca premios.
+Quiere competir.
+Pertenece a equipos.
+Consume contenido gamer.
+👥 Equipos competitivos
+Equipos pequeños y semiprofesionales.
+Necesidades:
+Competir.
+Ganar visibilidad.
+Crear reputación.
+Consultar resultados.
+🎮 Comunidades de videojuegos
+Ejemplo:
+Comunidades de Valorant.
+Comunidades de Free Fire.
+Comunidades de EA FC.
+Comunidades de Call of Duty.
+Estas comunidades pueden convertirse en la principal fuente de usuarios.
+👀 Espectadores
+Personas que:
+Siguen jugadores.
+Ven torneos.
+Consultan brackets.
+Ven rankings.
+A futuro pueden convertirse en jugadores.
+5. Funcionalidades del MVP
+Yo dividiría el MVP en:
+Módulo 1 — Usuarios
+Registro.
+Login.
+Recuperación de contraseña.
+Perfil.
+Foto.
+Nickname.
+País.
+Ciudad.
+Juegos favoritos.
+Módulo 2 — Juegos
+Catálogo inicial.
+Ejemplo:
+Valorant
+EA Sports FC
+Free Fire
+Call of Duty
+Cada juego tiene:
+Nombre.
+Imagen.
+Categorías.
+Modalidades.
+Plataforma.
+Módulo 3 — Torneos
+El usuario puede:
+Ver torneos.
+Filtrar.
+Consultar detalles.
+Inscribirse.
+El administrador puede:
+Crear.
+Editar.
+Publicar.
+Cancelar.
+Finalizar.
+Módulo 4 — Solicitud de torneos
+Este será un módulo muy importante y diferenciador.
+La comunidad puede decir:
+QUIERO UN TORNEO DE:
+Valorant
+Selecciona:
+Modo:
+5 vs 5
+Fecha preferida:
+Próximo sábado
+Horario:
+8:00 PM
+Sistema de demanda
+La plataforma puede visualizar:
+SOLICITUDES MÁS POPULARES
+1. Valorant 5v5
+   430 solicitudes
+2. Free Fire
+   280 solicitudes
+3. EA FC
+   190 solicitudes
+Esto permite tomar decisiones basadas en datos.
+Módulo 5 — Inscripciones
+Flujo:
+TORNEO
+   ↓
+INSCRIPCIÓN
+   ↓
+VALIDACIÓN
+   ↓
+PAGO
+   ↓
+CONFIRMACIÓN
+Estados:
+PENDIENTE
+CONFIRMADA
+CANCELADA
+RECHAZADA
+Módulo 6 — Equipos
+Los usuarios pueden:
+Crear equipo.
+Invitar jugadores.
+Abandonar.
+Expulsar jugadores.
+Designar capitán.
+El capitán realiza:
+Inscripciones.
+Confirmaciones.
+Módulo 7 — Brackets
+El sistema genera:
+Eliminación directa.
+Round Robin.
+Para el MVP empezaría con:
+Eliminación directa
+Después agregas:
+Doble eliminación.
+Swiss System.
+Módulo 8 — Partidos
+Cada partido tiene:
+Participantes.
+Fecha.
+Hora.
+Estado.
+Resultado.
+Ejemplo:
+Team Alpha
+VS
+Team Beta
+Estado:
+EN PROCESO
+Módulo 9 — Resultados
+Los resultados pueden ser:
+Opción inicial
+El jugador reporta:
+2 - 1
+El rival confirma.
+Si existe conflicto:
+ADMINISTRADOR REVISA
+Módulo 10 — Rankings
+Cada torneo genera puntos.
+Ejemplo:
+6. Arquitectura tecnológica
+Basándome en tus conocimientos, usaría:
+Frontend
+Next.js
+Next.js
+TypeScript
+Tailwind CSS
+Ventajas:
+SEO.
+Rendimiento.
+Paneles administrativos.
+Páginas públicas.
+Backend
+Spring Boot
+Como ya tienes experiencia con Java, puede ser una excelente opción.
+Spring Boot
+Spring Security
+JWT
+JPA / Hibernate
+Base de datos
+PostgreSQL
+Arquitectura
+                    USUARIOS
+                        │
+                        ▼
+              ┌───────────────────┐
+              │     NEXT.JS       │
+              │    FRONTEND       │
+              └─────────┬─────────┘
+                        │
+                      HTTPS
+                        │
+                        ▼
+              ┌───────────────────┐
+              │   SPRING BOOT     │
+              │      API REST     │
+              └─────────┬─────────┘
+                        │
+                        ▼
+              ┌───────────────────┐
+              │    POSTGRESQL     │
+              └───────────────────┘
+7. Arquitectura modular del backend
+src
+│
+├── auth
+├── users
+├── games
+├── tournaments
+├── registrations
+├── teams
+├── matches
+├── brackets
+├── rankings
+├── requests
+├── payments
+├── notifications
+├── admin
+│
+└── shared
+Yo utilizaría una arquitectura modular monolítica.
+No microservicios inicialmente.
+MONOLITO MODULAR
+      ↓
+VALIDACIÓN DEL NEGOCIO
+      ↓
+CRECIMIENTO
+      ↓
+EXTRACCIÓN DE SERVICIOS
+8. Modelo de Base de Datos
+users
+id
+email
+password
+role
+status
+created_at
+profiles
+id
+user_id
+nickname
+full_name
+avatar
+country
+city
+bio
+games
+id
+name
+slug
+image
+active
+teams
+id
+name
+tag
+logo
+captain_id
+created_at
+team_members
+id
+team_id
+user_id
+role
+status
+tournaments
+id
+game_id
+title
+description
+format
+max_participants
+registration_fee
+prize_pool
+start_date
+registration_deadline
+status
+created_by
+tournament_rules
+id
+tournament_id
+content
+registrations
+id
+tournament_id
+user_id
+team_id
+status
+registered_at
+brackets
+id
+tournament_id
+round
+position
+matches
+id
+tournament_id
+round
+participant_1
+participant_2
+winner_id
+status
+scheduled_at
+match_results
+id
+match_id
+reported_by
+score
+status
+tournament_requests
+id
+user_id
+game_id
+game_mode
+preferred_date
+preferred_time
+status
+rankings
+id
+user_id
+game_id
+points
+position
+updated_at
+payments
+id
+user_id
+tournament_id
+amount
+status
+payment_method
+transaction_id
+created_at
+9. Relaciones principales
+USER
+ │
+ ├──── PROFILE
+ │
+ ├──── TEAM MEMBER
+ │
+ ├──── REGISTRATIONS
+ │
+ ├──── PAYMENTS
+ │
+ └──── TOURNAMENT REQUESTS
+TOURNAMENT
+ │
+ ├──── GAME
+ │
+ ├──── REGISTRATIONS
+ │
+ ├──── MATCHES
+ │
+ ├──── RULES
+ │
+ └──── BRACKETS
+10. Roles del sistema
+PLAYER
+Puede:
+Registrarse.
+Crear equipos.
+Inscribirse.
+Reportar resultados.
+Solicitar torneos.
+MODERATOR
+Puede:
+Revisar conflictos.
+Gestionar reportes.
+Moderar usuarios.
+ADMIN
+Control total.
+Puede:
+Crear torneos.
+Gestionar pagos.
+Crear juegos.
+Gestionar usuarios.
+Aprobar resultados.
+Gestionar rankings.
+11. Roadmap de desarrollo
+🟢 Fase 0 — Validación
+Antes de desarrollar:
+Crear:
+Landing Page.
+Redes sociales.
+Discord.
+Formulario de interés.
+Preguntar:
+¿QUÉ JUEGO QUIERES COMPETIR?
+Medir:
+Juegos más solicitados.
+Horarios.
+Tipo de torneo.
+Interés por premios.
+🟢 Fase 1 — MVP Core
+Duración estimada:
+6 - 10 semanas
+Desarrollar:
+Registro.
+Login.
+Perfiles.
+Juegos.
+Panel administrador.
+Creación de torneos.
+Visualización.
+Inscripciones.
+Solicitudes de torneos.
+🟡 Fase 2 — Competición
+6 - 8 semanas
+Desarrollar:
+Equipos.
+Brackets.
+Partidos.
+Resultados.
+Confirmación.
+Reportes.
+Rankings.
+🔵 Fase 3 — Monetización
+4 - 8 semanas
+Desarrollar:
+Pagos.
+Inscripciones premium.
+Historial de transacciones.
+Panel financiero.
+Gestión de premios.
+🟣 Fase 4 — Comunidad
+4 - 6 semanas
+Desarrollar:
+Votaciones.
+Solicitudes.
+Rankings globales.
+Perfiles públicos.
+Logros.
+🔴 Fase 5 — Escalabilidad
+3 - 6 meses
+Streaming.
+API.
+Aplicación móvil.
+Integraciones.
+Estadísticas avanzadas.
+Patrocinios.
+12. Diferenciador principal
+Yo construiría un concepto llamado:
+Torneos impulsados por la comunidad
+Flujo:
+COMUNIDAD
+    │
+    ▼
+SOLICITA TORNEO
+    │
+    ▼
+VOTACIÓN
+    │
+    ▼
+DEMANDA ANALIZADA
+    │
+    ▼
+PLATAFORMA CREA EL TORNEO
+    │
+    ▼
+COMUNIDAD PARTICIPA
+Esto es muy poderoso porque evita crear torneos a ciegas.
+Mi recomendación de desarrollo inicial
+Si este fuera mi proyecto, empezaría así:
+🎮 2 videojuegos inicialmente.
+No 10.
+Por ejemplo:
+VALORANT
+EA SPORTS FC
+🎯 2 formatos:
+ELIMINACIÓN DIRECTA
+ROUND ROBIN
+💰 Pagos inicialmente opcionales.
+Primero validar:
+USUARIOS
+↓
+INTERÉS
+↓
+PARTICIPACIÓN
+↓
+CONFIANZA
+↓
+PAGOS
+Conclusión
+La estructura del negocio sería:
+Una plataforma propietaria de competencias gamer, donde la empresa crea y controla todos los torneos, mientras la comunidad influye directamente en qué competencias deben realizarse.
+Eso te permite construir un negocio basado en:
+COMUNIDAD
++
+DEMANDA
++
+TORNEOS
++
+INSCRIPCIONES
++
+PREMIOS
++
+MARCA
+Y para tu perfil técnico, considero que este proyecto puede convertirse en un muy buen proyecto de portafolio y, al mismo tiempo, un producto comercial real.
+Perfecto. Entonces vamos a convertir la idea en un proyecto estructurado como una startup tecnológica real, antes de comenzar el desarrollo.
+Mi propuesta es construir la siguiente base:
+🚀 Etapa de Definición Estratégica
+Nombre de la plataforma y posicionamiento
+Identidad y propuesta de marca
+Flujo completo de usuarios
+Arquitectura técnica detallada
+Modelo ER profesional de la base de datos
+Definición inicial de APIs
+Módulos y permisos del sistema
+Roadmap de construcción del MVP
+1. Nombre de la plataforma
+El nombre debería ser:
+Fácil de recordar.
+Relacionado con gaming.
+Profesional.
+Escalable.
+Funcional para Latinoamérica.
+No demasiado relacionado con un solo videojuego.
+Estas son mis opciones favoritas:
+🥇 Opción 1: Nexora
+Concepto:
+La nueva generación de competencias.
+Ventajas:
+Corto.
+Profesional.
+Moderno.
+Escalable.
+Puede crecer más allá de los torneos.
+Ejemplo:
+Nexora — Compite. Demuestra. Asciende.
+🥈 Opción 2: ArenaX
+Concepto:
+La arena digital donde nacen los campeones.
+Ventajas:
+Muy relacionado con competición.
+Fácil de recordar.
+Gamer.
+Internacional.
+Ejemplo:
+ArenaX — Entra a la arena.
+🥉 Opción 3: Vortiq
+Nombre tecnológico y competitivo.
+Ejemplo:
+Vortiq — El próximo torneo comienza aquí.
+Opción 4: RankUp
+Concepto:
+Sube de nivel. Sube en el ranking.
+Muy bueno para un sistema basado en:
+Rankings.
+Competitividad.
+Progreso.
+Opción 5: Clutch Arena
+Inspirado en el concepto gamer de lograr una victoria decisiva.
+Clutch Arena — Cuando todo depende de ti.
+Opción 6: NexPlay
+Más amigable y comercial.
+NexPlay — Tu próxima competencia comienza aquí.
+Opción 7: RiftCore
+Más agresivo y gamer.
+🎯 Mi recomendación
+Para construir una marca grande, mis favoritos serían:
+Nexora
+Vortiq
+RankUp
+Antes de tomar una decisión definitiva, habría que validar dominio, disponibilidad en redes sociales y posibles conflictos de marca.
+2. Posicionamiento de la plataforma
+La propuesta sería:
+Nexora es una plataforma de competencias gamer donde los jugadores descubren, solicitan y participan en torneos oficiales organizados y gestionados directamente por la plataforma.
+La diferencia fundamental sería:
+❌ Modelo abierto
+Usuarios crean torneos
+↓
+La plataforma solo proporciona herramientas
+✅ Nuestro modelo
+COMUNIDAD
+      ↓
+SOLICITA TORNEOS
+      ↓
+LA PLATAFORMA ANALIZA LA DEMANDA
+      ↓
+LA PLATAFORMA ORGANIZA EL TORNEO
+      ↓
+JUGADORES COMPITEN
+      ↓
+SE GENERA EL RANKING
+El mensaje comercial podría ser:
+🎮 Compite en los torneos que tú quieres.
+Esto resume perfectamente el diferenciador.
+3. Identidad del producto
+Personalidad
+La marca debería ser:
+Competitiva.
+Moderna.
+Tecnológica.
+Profesional.
+Confiable.
+Juvenil.
+Inclusiva.
+Yo evitaría una estética excesivamente infantil o saturada.
+La idea sería competir visualmente con productos tecnológicos modernos.
+Conceptos visuales
+La marca puede inspirarse en:
+Arenas.
+Conexiones.
+Rankings.
+Ascenso.
+Competición.
+Progresión.
+Elementos visuales:
+Tablas.
+Brackets.
+Niveles.
+Medallas.
+Insignias.
+Rankings.
+4. Flujo principal del usuario
+Paso 1 — Registro
+LANDING PAGE
+      ↓
+REGISTRO
+      ↓
+CREACIÓN DE PERFIL
+El usuario completa:
+Nickname.
+Avatar.
+País.
+Ciudad.
+Juegos favoritos.
+Paso 2 — Descubrimiento
+El usuario entra al dashboard.
+PRÓXIMOS TORNEOS
+🔥 Valorant Weekend Cup
+📅 12 de septiembre
+🎮 EA FC Pro League
+📅 18 de septiembre
+Paso 3 — Solicitud comunitaria
+Si no existe un torneo que quiere jugar:
+¿QUÉ TORNEO QUIERES?
+[ VALORANT ]
+Modo:
+[ 5v5 ]
+Fecha:
+[ Sábado ]
+Hora:
+[ 8:00 PM ]
+[SOLICITAR]
+Paso 4 — Participación
+Cuando la plataforma crea el torneo:
+TORNEO DISPONIBLE
+      ↓
+INSCRIPCIÓN
+      ↓
+CONFIRMACIÓN
+      ↓
+BRACKET
+      ↓
+PARTIDOS
+Paso 5 — Resultado
+PARTIDO FINALIZA
+      ↓
+RESULTADO REPORTADO
+      ↓
+RIVAL CONFIRMA
+      ↓
+RESULTADO OFICIAL
+      ↓
+BRACKET ACTUALIZADO
+5. Flujo del administrador
+Este es uno de los módulos más importantes.
+Dashboard administrativo
+El administrador debería visualizar:
+Métricas
+Usuarios registrados: 1.240
+Torneos activos: 8
+Inscripciones: 540
+Ingresos: $8.500.000
+Solicitudes nuevas: 320
+Análisis de demanda
+TORNEOS MÁS SOLICITADOS
+1. Valorant 5v5
+   ████████████ 320
+2. EA FC
+   ████████ 220
+3. Free Fire
+   ██████ 180
+Esto ayuda a decidir:
+¿Qué torneo deberíamos crear?
+Crear torneo
+El administrador configura:
+Información
+Nombre.
+Videojuego.
+Imagen.
+Descripción.
+Competición
+Formato.
+Participantes.
+Modalidad.
+Puntos.
+Fechas
+Inscripción.
+Inicio.
+Finalización.
+Economía
+Inscripción.
+Premio.
+6. Módulos principales
+La arquitectura del producto sería:
+┌──────────────────────────────┐
+│         PLATAFORMA           │
+└──────────────┬───────────────┘
+               │
+       ┌───────┼────────┐
+       │       │        │
+       ▼       ▼        ▼
+    USUARIOS TORNEOS ADMIN
+       │       │        │
+       ▼       ▼        ▼
+    EQUIPOS  PARTIDOS PAGOS
+       │       │        │
+       └───────┼────────┘
+               ▼
+          RANKINGS
+               │
+               ▼
+      SOLICITUDES COMUNIDAD
+7. Arquitectura técnica detallada
+Para ti, mi recomendación sigue siendo:
+Frontend
+Next.js
+TypeScript
+Tailwind CSS
+Librerías posibles
+Zustand
+TanStack Query
+React Hook Form
+Zod
+Axios
+Backend
+Spring Boot
+Java
+Spring Security
+JWT
+JPA / Hibernate
+Arquitectura:
+Controller
+   ↓
+Service
+   ↓
+Repository
+   ↓
+Database
+Arquitectura modular
+backend
+│
+├── auth
+│
+├── users
+│   ├── controller
+│   ├── service
+│   ├── repository
+│   └── dto
+│
+├── tournaments
+│   ├── controller
+│   ├── service
+│   ├── repository
+│   └── dto
+│
+├── teams
+├── matches
+├── rankings
+├── payments
+├── requests
+│
+└── shared
+8. Infraestructura
+Inicialmente:
+USUARIO
+   │
+   ▼
+FRONTEND
+Next.js
+   │
+   ▼
+BACKEND
+Spring Boot
+   │
+   ├────────► PostgreSQL
+   │
+   ├────────► Redis
+   │
+   └────────► Almacenamiento de archivos
+Redis
+Podría utilizarse posteriormente para:
+Caché.
+Rankings.
+Rate limiting.
+Sesiones.
+Datos temporales.
+9. Modelo ER profesional
+Las entidades centrales serían:
+USER
+ │
+ ├── PROFILE
+ │
+ ├── TEAM_MEMBER
+ │
+ ├── TOURNAMENT_REGISTRATION
+ │
+ ├── TOURNAMENT_REQUEST
+ │
+ └── PAYMENT
+GAME
+ │
+ ├── GAME_MODE
+ │
+ ├── TOURNAMENT
+ │
+ └── RANKING
+TOURNAMENT
+ │
+ ├── TOURNAMENT_RULE
+ │
+ ├── TOURNAMENT_REGISTRATION
+ │
+ ├── TOURNAMENT_PARTICIPANT
+ │
+ ├── TOURNAMENT_ROUND
+ │
+ └── MATCH
+Tablas principales
+users
+id
+email
+password_hash
+role
+status
+email_verified
+created_at
+updated_at
+profiles
+id
+user_id
+nickname
+first_name
+last_name
+avatar_url
+country
+city
+bio
+created_at
+updated_at
+games
+id
+name
+slug
+description
+image_url
+active
+game_modes
+id
+game_id
+name
+players_per_team
+Ejemplo:
+Valorant
+├── 1v1
+├── 2v2
+└── 5v5
+tournaments
+id
+game_id
+game_mode_id
+title
+slug
+description
+banner_url
+format
+registration_type
+registration_fee
+prize_pool
+max_participants
+registration_start
+registration_end
+starts_at
+ends_at
+status
+created_by
+tournament_rules
+id
+tournament_id
+title
+content
+sort_order
+teams
+id
+name
+tag
+logo_url
+captain_id
+status
+created_at
+team_members
+id
+team_id
+user_id
+role
+joined_at
+status
+tournament_registrations
+id
+tournament_id
+participant_type
+user_id
+team_id
+status
+registered_at
+Aquí se debe garantizar que exista usuario o equipo, pero no ambos.
+tournament_participants
+Esta tabla representa a quienes ya fueron aceptados.
+id
+tournament_id
+registration_id
+seed
+status
+tournament_rounds
+id
+tournament_id
+number
+name
+status
+matches
+id
+tournament_id
+round_id
+participant_one_id
+participant_two_id
+winner_id
+status
+scheduled_at
+started_at
+completed_at
+match_results
+id
+match_id
+reported_by
+score_data
+evidence_url
+status
+tournament_requests
+id
+user_id
+game_id
+game_mode_id
+preferred_date
+preferred_time
+notes
+status
+created_at
+tournament_request_votes
+Esto permitiría medir demanda comunitaria.
+id
+tournament_request_id
+user_id
+created_at
+rankings
+id
+user_id
+game_id
+points
+wins
+losses
+tournaments_played
+updated_at
+ranking_history
+id
+ranking_id
+points_change
+reason
+tournament_id
+created_at
+Esto permite saber:
+¿Por qué el usuario ganó o perdió puntos?
+10. Definición inicial de API
+Autenticación
+POST /auth/register
+POST /auth/login
+POST /auth/refresh
+POST /auth/forgot-password
+POST /auth/reset-password
+GET  /auth/me
+Usuarios
+GET    /users/me
+PATCH  /users/me
+GET    /users/{nickname}
+Juegos
+GET /games
+GET /games/{slug}
+GET /games/{id}/modes
+Torneos
+GET /tournaments
+GET /tournaments/{slug}
+GET /tournaments/{id}/bracket
+Inscripciones
+POST /tournaments/{id}/registrations
+GET  /tournaments/{id}/registrations
+DELETE /registrations/{id}
+Solicitudes
+POST /tournament-requests
+GET  /tournament-requests
+POST /tournament-requests/{id}/vote
+Equipos
+POST   /teams
+GET    /teams/{id}
+PATCH  /teams/{id}
+POST   /teams/{id}/members
+DELETE /teams/{id}/members/{userId}
+Partidos
+GET  /matches/{id}
+POST /matches/{id}/results
+POST /matches/{id}/confirm
+POST /matches/{id}/dispute
+Administración
+POST  /admin/tournaments
+PATCH /admin/tournaments/{id}
+GET /admin/dashboard
+GET /admin/tournament-requests
+POST /admin/matches/{id}/resolve
+11. Roles y permisos
+PLAYER
+READ_TOURNAMENT
+REGISTER_TOURNAMENT
+CREATE_TEAM
+JOIN_TEAM
+REPORT_RESULT
+REQUEST_TOURNAMENT
+VOTE_REQUEST
+MODERATOR
+VIEW_REPORTS
+RESOLVE_DISPUTES
+MODERATE_USERS
+ADMIN
+MANAGE_TOURNAMENTS
+MANAGE_USERS
+MANAGE_PAYMENTS
+MANAGE_GAMES
+MANAGE_RANKINGS
+VIEW_ANALYTICS
+12. Roadmap de construcción real
+Fase 0 — Diseño y planificación
+1 a 2 semanas
+Objetivo
+No escribir código todavía.
+Crear:
+Nombre.
+Logo.
+Branding.
+Wireframes.
+Modelo de datos.
+Arquitectura.
+Backlog.
+Fase 1 — Base técnica
+1 a 2 semanas
+Desarrollar:
+Backend
+├── Spring Boot
+├── PostgreSQL
+├── Docker
+├── Spring Security
+└── JWT
+Frontend
+├── Next.js
+├── TypeScript
+└── Tailwind
+Fase 2 — Usuarios
+2 semanas
+Desarrollar:
+Registro.
+Login.
+Perfil.
+Roles.
+Panel inicial.
+Fase 3 — Administración
+2 semanas
+Desarrollar:
+Dashboard.
+Gestión de juegos.
+Creación de torneos.
+Publicación.
+Gestión de solicitudes.
+Fase 4 — Participación
+2 a 3 semanas
+Desarrollar:
+Visualización.
+Inscripciones.
+Equipos.
+Validación de participantes.
+Fase 5 — Competición
+3 a 4 semanas
+Desarrollar:
+Brackets.
+Rondas.
+Partidos.
+Resultados.
+Confirmación.
+Avance automático.
+Fase 6 — Rankings
+1 a 2 semanas
+Desarrollar:
+Sistema de puntos.
+Rankings.
+Historial.
+Fase 7 — Pagos
+2 a 3 semanas
+Desarrollar:
+Pagos.
+Confirmaciones.
+Webhooks.
+Historial.
+Reembolsos.
+13. Prioridad de construcción
+El orden correcto sería:
+1. DISEÑO DEL NEGOCIO
+          ↓
+2. MODELO DE DATOS
+          ↓
+3. AUTENTICACIÓN
+          ↓
+4. ADMINISTRACIÓN
+          ↓
+5. CREACIÓN DE TORNEOS
+          ↓
+6. INSCRIPCIONES
+          ↓
+7. BRACKETS
+          ↓
+8. PARTIDOS
+          ↓
+9. RESULTADOS
+          ↓
+10. RANKINGS
+          ↓
+11. PAGOS
+🚨 Mi recomendación más importante
+Yo no empezaría programando la plataforma completa.
+Primero desarrollaría un MVP con una experiencia extremadamente sólida para este flujo:
+JUGADOR
+  ↓
+REGISTRO
+  ↓
+VE UN TORNEO
+  ↓
+SE INSCRIBE
+  ↓
+PAGA
+  ↓
+COMPITE
+  ↓
+REPORTA RESULTADO
+  ↓
+AVANZA
+  ↓
+APARECE EN EL RANKING
+Si ese flujo funciona perfectamente, tendrás el núcleo del producto.
+Siguiente paso
+El paso que considero más útil ahora es bajar todo esto a un documento técnico y funcional de nivel proyecto real, definiendo:
+Nombre temporal del proyecto.
+Stack tecnológico definitivo.
+Estructura completa de carpetas.
+Diagrama ER con relaciones y cardinalidades.
+Reglas de negocio.
+Casos de uso.
+Estados de cada entidad.
+Algoritmo de generación y avance de brackets.
+Backlog del MVP con épicas, historias de usuario y prioridades.
+Ese documento sería la verdadera hoja de ruta antes de abrir el IDE y comenzar a programar.
+
+--- TABLE ---
+Destino | Porcentaje
+Premios | 50%
+Operación | 20%
+Plataforma | 30%
+-------------
+
+
+--- TABLE ---
+Posición | Puntos
+🥇 | 100
+🥈 | 60
+🥉 | 40
+Participación | 10
+-------------
+
+
+
+====================================
+FILE: Requerimientos.docx
+====================================
+
+TOPRIVAL
+Especificación de Requisitos, Modelo ER y Máquina de Estados
+Versión: 1.0
+Estado: Planificación técnica
+Producto: Plataforma web de torneos gamer
+Alcance: MVP con preparación para futuras versiones
+1. OBJETIVO DEL DOCUMENTO
+Este documento define el comportamiento funcional y técnico necesario para construir el MVP de TopRival.
+Su propósito es servir como base para:
+Diseño UX/UI.
+Desarrollo frontend.
+Desarrollo backend.
+Diseño de la base de datos.
+Creación de APIs.
+Pruebas.
+Evolución futura del producto.
+La arquitectura deberá permitir ampliar la plataforma sin tener que rediseñar completamente sus componentes principales.
+2. DEFINICIÓN DEL ALCANCE DEL MVP
+El MVP de TopRival debe permitir validar el flujo principal de una competencia:
+REGISTRO
+   ↓
+EXPLORAR TORNEOS
+   ↓
+INSCRIPCIÓN
+   ↓
+VALIDACIÓN
+   ↓
+GENERACIÓN DEL BRACKET
+   ↓
+COMPETICIÓN
+   ↓
+RESULTADO
+   ↓
+AVANCE
+   ↓
+FINALIZACIÓN
+   ↓
+ACTUALIZACIÓN DEL RANKING
+Además, debe permitir validar la participación de la comunidad mediante:
+JUGADOR
+   ↓
+SOLICITA UN TORNEO
+   ↓
+OTROS USUARIOS VOTAN
+   ↓
+TOPRIVAL ANALIZA LA DEMANDA
+   ↓
+EL ADMINISTRADOR DECIDE
+3. REQUISITOS FUNCIONALES
+RF-01 — Registro de usuarios
+El sistema debe permitir a un visitante crear una cuenta.
+Datos mínimos:
+Correo electrónico.
+Contraseña.
+Nickname.
+El sistema debe validar:
+Formato del correo.
+Unicidad del correo.
+Unicidad del nickname.
+Seguridad mínima de la contraseña.
+Futuro
+El modelo deberá permitir posteriormente:
+Registro con Google.
+Registro con Discord.
+Registro con Twitch.
+Registro con otras plataformas.
+RF-02 — Inicio de sesión
+El sistema debe permitir que un usuario autenticado acceda a su cuenta mediante:
+Correo electrónico.
+Contraseña.
+El sistema debe:
+Generar una sesión autenticada.
+Controlar el acceso según el rol.
+Permitir cerrar sesión.
+Permitir renovar credenciales.
+Futuro
+Autenticación multifactor.
+Passkeys.
+Inicio de sesión social.
+RF-03 — Recuperación de contraseña
+El sistema debe permitir solicitar la recuperación de una contraseña mediante correo electrónico.
+El enlace o token de recuperación debe:
+Ser temporal.
+Tener un único uso.
+Ser invalidado después de restablecer la contraseña.
+RF-04 — Gestión del perfil
+El usuario debe poder visualizar y editar:
+Nickname.
+Nombre visible.
+Avatar.
+Biografía.
+País.
+Ciudad.
+El sistema debe mostrar:
+Torneos jugados.
+Victorias.
+Derrotas.
+Puntos.
+Posición en ranking.
+Futuro
+Enlaces sociales.
+Perfil competitivo público.
+Insignias.
+Logros.
+Estadísticas avanzadas.
+RF-05 — Gestión de roles
+El sistema debe gestionar inicialmente los siguientes roles:
+PLAYER
+MODERATOR
+ADMIN
+El sistema debe impedir que un usuario realice acciones sin autorización.
+Futuro
+El modelo debe permitir:
+SUPER_ADMIN
+TOURNAMENT_ADMIN
+SUPPORT
+FINANCE
+CASTER
+Por este motivo, se recomienda un sistema basado en roles y permisos, en lugar de codificar permisos directamente en la lógica.
+RF-06 — Gestión de videojuegos
+El administrador debe poder:
+Crear videojuegos.
+Editar videojuegos.
+Activar videojuegos.
+Desactivar videojuegos.
+Gestionar modalidades.
+Ejemplo:
+Valorant
+   ├── 1v1
+   ├── 2v2
+   └── 5v5
+Un videojuego desactivado no debe poder utilizarse para crear nuevos torneos.
+RF-07 — Solicitud de torneo
+Un jugador autenticado debe poder solicitar un futuro torneo.
+La solicitud debe contener:
+Videojuego.
+Modalidad.
+Formato deseado.
+Fecha preferida.
+Horario preferido.
+Comentario opcional.
+El sistema debe registrar:
+Usuario solicitante.
+Fecha de creación.
+Estado de la solicitud.
+Restricción
+El usuario no crea directamente un torneo.
+Solo genera una solicitud.
+RF-08 — Votación de solicitudes
+Un usuario autenticado debe poder apoyar una solicitud existente.
+Reglas:
+Un usuario solo puede votar una vez por solicitud.
+Un usuario puede retirar su voto.
+No puede votar solicitudes cerradas.
+El sistema debe mostrar la demanda total.
+Futuro
+Votaciones por fecha.
+Votaciones por horario.
+Sugerencias inteligentes.
+Detección automática de solicitudes similares.
+RF-09 — Gestión de equipos
+Un jugador debe poder:
+Crear un equipo.
+Editar la información básica.
+Invitar jugadores.
+Expulsar jugadores.
+Abandonar un equipo.
+Cambiar el capitán.
+El equipo debe contener:
+Nombre.
+Tag.
+Logo.
+Capitán.
+Estado.
+Restricción
+El sistema debe impedir la existencia de dos miembros activos iguales dentro del mismo equipo.
+Decisión técnica
+Para facilitar futuras modalidades, un usuario puede pertenecer a varios equipos, siempre que las reglas de un torneo específico no lo impidan.
+RF-10 — Gestión de torneos
+Solo los administradores autorizados pueden crear torneos.
+Un torneo debe permitir configurar:
+Información
+Título.
+Slug.
+Descripción.
+Banner.
+Videojuego.
+Modalidad.
+Competición
+Tipo de participante.
+Formato.
+Máximo de participantes.
+Tamaño del equipo requerido.
+Fechas
+Inicio de inscripciones.
+Fin de inscripciones.
+Inicio del torneo.
+Fin estimado.
+Configuración
+Visibilidad.
+Reglas.
+Requisitos.
+Economía
+Preparado para:
+Torneos gratuitos.
+Torneos pagos.
+Prize pool.
+Futuro
+Patrocinadores.
+Clasificatorios.
+Torneos por temporada.
+Torneos privados.
+Series competitivas.
+RF-11 — Consulta y descubrimiento de torneos
+Los visitantes y usuarios deben poder consultar torneos públicos.
+El sistema debe permitir filtrar por:
+Videojuego.
+Modalidad.
+Estado.
+Fecha.
+Cada torneo debe mostrar:
+Nombre.
+Banner.
+Videojuego.
+Modalidad.
+Fecha.
+Estado.
+Participantes.
+Precio de inscripción.
+Premio.
+RF-12 — Inscripción a un torneo
+Un usuario debe poder solicitar inscripción a un torneo.
+Dependiendo del tipo:
+Individual
+PLAYER
+    ↓
+REGISTRATION
+Por equipos
+TEAM CAPTAIN
+    ↓
+TEAM
+    ↓
+REGISTRATION
+El sistema debe validar:
+Estado del torneo.
+Fecha de inscripción.
+Disponibilidad de cupos.
+Requisitos del participante.
+Futuro
+Lista de espera.
+Clasificación previa.
+Código de invitación.
+Inscripciones privadas.
+RF-13 — Validación de inscripción
+El administrador debe poder:
+Confirmar.
+Rechazar.
+Cancelar.
+una inscripción cuando sea necesario.
+El sistema debe impedir la generación del bracket con inscripciones no válidas.
+RF-14 — Generación del bracket
+El sistema debe generar brackets de eliminación directa.
+Proceso:
+INSCRIPCIONES CERRADAS
+        ↓
+PARTICIPANTES CONFIRMADOS
+        ↓
+GENERAR SEEDING
+        ↓
+CREAR RONDAS
+        ↓
+CREAR PARTIDOS
+El administrador debe poder seleccionar:
+Aleatorio.
+Ranking.
+El sistema debe soportar tamaños no potencia de dos mediante:
+BYE.
+Avance automático.
+Futuro
+Doble eliminación.
+Round Robin.
+Swiss.
+Grupos + eliminación.
+RF-15 — Gestión de partidos
+El sistema debe crear y gestionar automáticamente los partidos.
+Cada partido debe contener:
+Torneo.
+Ronda.
+Participantes.
+Fecha y hora.
+Estado.
+Resultado.
+Ganador.
+El administrador debe poder modificar la programación antes del inicio del partido.
+RF-16 — Reporte de resultados
+El jugador o capitán autorizado debe poder reportar el resultado de un partido.
+Debe registrar:
+Marcador.
+Ganador.
+Evidencia opcional o requerida.
+El rival debe poder:
+Confirmar.
+Rechazar.
+Disputar.
+el resultado.
+RF-17 — Resolución de disputas
+Un moderador o administrador debe poder revisar una disputa.
+Debe poder:
+Aprobar un resultado.
+Modificar un resultado.
+Declarar ganador.
+Invalidar el partido.
+Reprogramar el partido.
+Toda resolución administrativa debe quedar registrada.
+RF-18 — Avance automático
+Cuando un resultado sea oficial:
+PARTIDO FINALIZADO
+        ↓
+GANADOR
+        ↓
+SIGUIENTE PARTIDO
+El sistema debe ubicar automáticamente al ganador en el siguiente partido.
+RF-19 — Rankings
+El sistema debe mantener un ranking individual por videojuego.
+Debe registrar:
+Puntos.
+Victorias.
+Derrotas.
+Torneos jugados.
+El sistema debe recalcular o actualizar el ranking cuando finalice un torneo.
+Futuro
+Ranking por equipos.
+Ranking regional.
+Ranking por temporada.
+MMR.
+ELO.
+RF-20 — Panel administrativo
+El administrador debe disponer de un panel para:
+Gestionar usuarios.
+Gestionar videojuegos.
+Gestionar modalidades.
+Gestionar solicitudes.
+Crear torneos.
+Gestionar inscripciones.
+Generar brackets.
+Gestionar partidos.
+Resolver disputas.
+Consultar métricas.
+RF-21 — Historial de auditoría
+El sistema debe registrar acciones importantes:
+Creación de torneos.
+Modificaciones.
+Cancelaciones.
+Resolución de disputas.
+Cambios manuales de resultados.
+El registro debe incluir:
+Usuario responsable.
+Acción.
+Fecha.
+Entidad afectada.
+Futuro
+Este módulo podrá evolucionar hacia auditoría financiera y seguridad avanzada.
+4. REQUISITOS NO FUNCIONALES
+RNF-01 — Seguridad
+El sistema debe:
+Utilizar HTTPS.
+Almacenar contraseñas cifradas mediante hashing.
+Validar permisos en el backend.
+Proteger rutas administrativas.
+Validar entradas.
+Evitar acceso a información no autorizada.
+RNF-02 — Rendimiento
+Objetivo inicial:
+La mayoría de las operaciones normales deben responder en menos de 2 segundos.
+Las consultas públicas de torneos deben estar optimizadas.
+Las operaciones administrativas no deben bloquear el acceso general.
+Las tareas pesadas deben prepararse para ejecutarse de forma asíncrona.
+Ejemplos:
+Generación masiva de brackets.
+Procesamiento de pagos.
+Notificaciones.
+Actualización masiva de rankings.
+RNF-03 — Escalabilidad
+La arquitectura debe permitir:
+Separar el frontend.
+Escalar horizontalmente el backend.
+Utilizar caché.
+Introducir colas.
+Extraer módulos en servicios independientes si el crecimiento lo requiere.
+No se utilizarán microservicios inicialmente.
+RNF-04 — Disponibilidad
+Objetivo inicial:
+99.5%
+Las operaciones críticas deben manejar errores controlados.
+RNF-05 — Integridad de datos
+Las operaciones críticas deben utilizar transacciones.
+Especialmente:
+Confirmación de inscripciones.
+Generación de brackets.
+Confirmación de resultados.
+Avance de ganadores.
+Actualización de rankings.
+RNF-06 — Seguridad de API
+La API debe contar con:
+Autenticación.
+Autorización.
+Rate limiting.
+Validación de entrada.
+Manejo centralizado de errores.
+Versionado.
+Formato:
+/api/v1/
+RNF-07 — Compatibilidad
+El MVP debe ser responsive.
+Debe funcionar correctamente en:
+Computadores.
+Tablets.
+Dispositivos móviles.
+No se desarrollará aplicación móvil nativa durante el MVP.
+RNF-08 — Observabilidad
+El sistema debe preparar:
+Logs de aplicación.
+Registro de errores.
+Métricas.
+Trazabilidad de errores.
+RNF-09 — Mantenibilidad
+El código debe:
+Estar modularizado.
+Seguir convenciones definidas.
+Contar con documentación.
+Evitar lógica de negocio en controladores.
+Utilizar DTOs.
+Separar responsabilidades.
+RNF-10 — Accesibilidad
+La interfaz debe:
+Tener contraste adecuado.
+Ser navegable mediante teclado cuando corresponda.
+Utilizar etiquetas accesibles.
+No depender únicamente del color para comunicar estados.
+5. MODELO ER PROPUESTO
+5.1 Principio de diseño
+El modelo debe estar diseñado para:
+MVP SIMPLE
+      ↓
+CRECIMIENTO FUTURO
+      ↓
+NUEVOS FORMATOS
+      ↓
+NUEVOS TIPOS DE PARTICIPANTES
+      ↓
+MONETIZACIÓN
+Por este motivo, se recomienda evitar relaciones rígidas como:
+MATCH → PLAYER_1
+MATCH → PLAYER_2
+Se utilizará una entidad participante.
+6. ENTIDADES PRINCIPALES
+USERS
+id UUID PK
+email VARCHAR UNIQUE
+password_hash VARCHAR
+status ENUM
+email_verified_at TIMESTAMP NULL
+last_login_at TIMESTAMP NULL
+created_at TIMESTAMP
+updated_at TIMESTAMP
+PROFILES
+id UUID PK
+user_id UUID FK UNIQUE
+nickname VARCHAR UNIQUE
+display_name VARCHAR
+avatar_url VARCHAR NULL
+bio TEXT NULL
+country_code VARCHAR NULL
+city VARCHAR NULL
+created_at TIMESTAMP
+updated_at TIMESTAMP
+Relación:
+USER 1 ───── 1 PROFILE
+ROLES
+id UUID PK
+name VARCHAR UNIQUE
+description VARCHAR
+USER_ROLES
+user_id UUID FK
+role_id UUID FK
+assigned_at TIMESTAMP
+Esto permite múltiples roles futuros.
+PERMISSIONS
+id UUID PK
+name VARCHAR UNIQUE
+description VARCHAR
+ROLE_PERMISSIONS
+role_id UUID FK
+permission_id UUID FK
+GAMES
+id UUID PK
+name VARCHAR UNIQUE
+slug VARCHAR UNIQUE
+description TEXT NULL
+image_url VARCHAR NULL
+status ENUM
+created_at TIMESTAMP
+updated_at TIMESTAMP
+GAME_MODES
+id UUID PK
+game_id UUID FK
+name VARCHAR
+team_size INT
+min_players INT NULL
+max_players INT NULL
+status ENUM
+Ejemplo:
+Valorant
+    └── 5v5
+TEAMS
+id UUID PK
+name VARCHAR
+tag VARCHAR
+logo_url VARCHAR NULL
+captain_user_id UUID FK
+status ENUM
+created_at TIMESTAMP
+updated_at TIMESTAMP
+TEAM_MEMBERS
+id UUID PK
+team_id UUID FK
+user_id UUID FK
+role ENUM
+status ENUM
+joined_at TIMESTAMP
+left_at TIMESTAMP NULL
+Restricción:
+UNIQUE(team_id, user_id)
+7. MODELO DE TORNEOS
+TOURNAMENTS
+id UUID PK
+game_id UUID FK
+game_mode_id UUID FK
+created_by UUID FK
+title VARCHAR
+slug VARCHAR UNIQUE
+description TEXT
+banner_url VARCHAR NULL
+participant_type ENUM
+format ENUM
+seeding_type ENUM
+max_participants INT
+registration_fee DECIMAL(12,2)
+prize_pool DECIMAL(12,2)
+currency VARCHAR(3)
+registration_starts_at TIMESTAMP
+registration_ends_at TIMESTAMP
+starts_at TIMESTAMP
+ends_at TIMESTAMP NULL
+status ENUM
+created_at TIMESTAMP
+updated_at TIMESTAMP
+TOURNAMENT_RULES
+id UUID PK
+tournament_id UUID FK
+title VARCHAR
+content TEXT
+display_order INT
+TOURNAMENT_REGISTRATIONS
+Representa la solicitud de inscripción.
+id UUID PK
+tournament_id UUID FK
+registration_type ENUM
+user_id UUID FK NULL
+team_id UUID FK NULL
+status ENUM
+registered_at TIMESTAMP
+validated_at TIMESTAMP NULL
+validated_by UUID FK NULL
+created_at TIMESTAMP
+updated_at TIMESTAMP
+Restricción conceptual:
+USER_ID XOR TEAM_ID
+Solo uno puede tener valor.
+TOURNAMENT_PARTICIPANTS
+Representa al participante oficialmente incorporado a la competencia.
+id UUID PK
+tournament_id UUID FK
+registration_id UUID FK UNIQUE
+participant_type ENUM
+user_id UUID FK NULL
+team_id UUID FK NULL
+seed INT NULL
+status ENUM
+created_at TIMESTAMP
+Esta tabla permite separar:
+SOLICITUD DE INSCRIPCIÓN
+        ≠
+PARTICIPANTE CONFIRMADO
+8. MODELO DE COMPETICIÓN
+TOURNAMENT_STAGES
+Preparado para futuras estructuras.
+id UUID PK
+tournament_id UUID FK
+name VARCHAR
+stage_type ENUM
+stage_order INT
+status ENUM
+En el MVP:
+STAGE_TYPE = SINGLE_ELIMINATION
+Futuro:
+GROUP_STAGE
+SINGLE_ELIMINATION
+DOUBLE_ELIMINATION
+SWISS
+ROUND_ROBIN
+TOURNAMENT_ROUNDS
+id UUID PK
+stage_id UUID FK
+round_number INT
+name VARCHAR
+status ENUM
+MATCHES
+id UUID PK
+stage_id UUID FK
+round_id UUID FK NULL
+match_number INT
+status ENUM
+scheduled_at TIMESTAMP NULL
+started_at TIMESTAMP NULL
+completed_at TIMESTAMP NULL
+winner_participant_id UUID FK NULL
+next_match_id UUID FK NULL
+next_match_slot INT NULL
+created_at TIMESTAMP
+updated_at TIMESTAMP
+Importante
+No se guardan los participantes directamente en la tabla MATCHES.
+MATCH_PARTICIPANTS
+id UUID PK
+match_id UUID FK
+tournament_participant_id UUID FK
+slot INT
+score INT NULL
+status ENUM
+Restricción:
+UNIQUE(match_id, slot)
+Esto permite soportar futuros formatos y estructuras más flexibles.
+MATCH_RESULTS
+id UUID PK
+match_id UUID FK
+reported_by UUID FK
+result_data JSONB
+evidence_url VARCHAR NULL
+status ENUM
+created_at TIMESTAMP
+updated_at TIMESTAMP
+El campo result_data permitirá almacenar resultados diferentes según el videojuego.
+Ejemplo:
+{
+  "participant_1_score": 2,
+  "participant_2_score": 1
+}
+MATCH_DISPUTES
+id UUID PK
+match_id UUID FK
+opened_by UUID FK
+reason TEXT
+evidence_url VARCHAR NULL
+status ENUM
+resolved_by UUID FK NULL
+resolution TEXT NULL
+created_at TIMESTAMP
+resolved_at TIMESTAMP NULL
+9. MODELO DE DEMANDA COMUNITARIA
+TOURNAMENT_REQUESTS
+id UUID PK
+created_by UUID FK
+game_id UUID FK
+game_mode_id UUID FK
+format ENUM
+preferred_date DATE NULL
+preferred_time TIME NULL
+comment TEXT NULL
+status ENUM
+created_at TIMESTAMP
+updated_at TIMESTAMP
+TOURNAMENT_REQUEST_VOTES
+id UUID PK
+request_id UUID FK
+user_id UUID FK
+created_at TIMESTAMP
+Restricción:
+UNIQUE(request_id, user_id)
+10. MODELO DE RANKING
+RANKINGS
+id UUID PK
+user_id UUID FK
+game_id UUID FK
+points INT
+wins INT
+losses INT
+tournaments_played INT
+updated_at TIMESTAMP
+Restricción:
+UNIQUE(user_id, game_id)
+RANKING_HISTORY
+id UUID PK
+ranking_id UUID FK
+points_before INT
+points_change INT
+points_after INT
+reason VARCHAR
+tournament_id UUID FK NULL
+match_id UUID FK NULL
+created_at TIMESTAMP
+11. MODELO DE PAGOS
+El MVP debe preparar el modelo aunque los pagos puedan activarse posteriormente.
+PAYMENTS
+id UUID PK
+user_id UUID FK
+registration_id UUID FK
+amount DECIMAL(12,2)
+currency VARCHAR(3)
+provider VARCHAR
+external_transaction_id VARCHAR NULL
+status ENUM
+created_at TIMESTAMP
+updated_at TIMESTAMP
+12. MODELO DE AUDITORÍA
+AUDIT_LOGS
+id UUID PK
+actor_user_id UUID FK NULL
+action VARCHAR
+entity_type VARCHAR
+entity_id UUID
+before_data JSONB NULL
+after_data JSONB NULL
+ip_address VARCHAR NULL
+created_at TIMESTAMP
+13. DIAGRAMA ER CONCEPTUAL
+USERS
+  │ 1
+  │
+  │ 1
+PROFILES
+USERS
+  │ N
+  ├──────── USER_ROLES ──────── ROLES
+  │
+  └──────── TOURNAMENT_REQUESTS
+GAMES
+  │ 1
+  │
+  │ N
+GAME_MODES
+  │
+  │
+TOURNAMENTS
+  │
+  ├──── TOURNAMENT_RULES
+  │
+  ├──── TOURNAMENT_REGISTRATIONS
+  │
+  ├──── TOURNAMENT_PARTICIPANTS
+  │
+  └──── TOURNAMENT_STAGES
+               │
+               └──── TOURNAMENT_ROUNDS
+                          │
+                          └──── MATCHES
+                                  │
+                                  ├──── MATCH_PARTICIPANTS
+                                  │
+                                  ├──── MATCH_RESULTS
+                                  │
+                                  └──── MATCH_DISPUTES
+14. MÁQUINA DE ESTADOS
+14.1 ESTADOS DEL TORNEO
+                    ┌───────────┐
+                    │   DRAFT   │
+                    └─────┬─────┘
+                          │ publicar
+                          ▼
+                   ┌─────────────┐
+                   │  PUBLISHED  │
+                   └──────┬──────┘
+                          │ abrir inscripciones
+                          ▼
+               ┌─────────────────────┐
+               │  REGISTRATION_OPEN  │
+               └──────────┬──────────┘
+                          │ cerrar
+                          ▼
+               ┌─────────────────────┐
+               │ REGISTRATION_CLOSED │
+               └──────────┬──────────┘
+                          │ validar
+                          ▼
+                      ┌───────┐
+                      │ READY │
+                      └───┬───┘
+                          │ iniciar
+                          ▼
+                   ┌─────────────┐
+                   │ IN_PROGRESS │
+                   └──────┬──────┘
+                          │ finalizar
+                          ▼
+                    ┌──────────┐
+                    │ FINISHED │
+                    └──────────┘
+Estados globales:
+PAUSED
+CANCELLED
+14.2 ESTADOS DE INSCRIPCIÓN
+PENDING
+   │
+   ├── confirmar ──────► CONFIRMED
+   │
+   ├── rechazar ───────► REJECTED
+   │
+   └── cancelar ───────► CANCELLED
+En futuro puede agregarse:
+WAITLIST
+PAYMENT_PENDING
+PAYMENT_FAILED
+14.3 ESTADOS DEL PARTICIPANTE
+REGISTERED
+     ↓
+CONFIRMED
+     ↓
+ACTIVE
+     ↓
+ELIMINATED
+Estados adicionales:
+WITHDRAWN
+DISQUALIFIED
+WINNER
+14.4 ESTADOS DEL PARTIDO
+PENDING
+   │
+   ▼
+SCHEDULED
+   │
+   ▼
+IN_PROGRESS
+   │
+   ▼
+RESULT_PENDING
+   │
+   ├── confirmado ───► COMPLETED
+   │
+   └── disputa ──────► DISPUTED
+                            │
+                            ▼
+                         RESOLVED
+                            │
+                            ▼
+                         COMPLETED
+Estados alternativos:
+CANCELLED
+VOID
+14.5 ESTADOS DEL RESULTADO
+REPORTED
+   │
+   ├── confirmar ───► CONFIRMED
+   │
+   ├── rechazar ────► REJECTED
+   │
+   └── disputar ────► DISPUTED
+                           │
+                           ▼
+                       ADMIN_REVIEW
+                           │
+                           ▼
+                        APPROVED
+14.6 ESTADOS DE UNA DISPUTA
+OPEN
+  │
+  ▼
+UNDER_REVIEW
+  │
+  ├── aceptar resultado ──► RESOLVED
+  │
+  ├── modificar resultado ► RESOLVED
+  │
+  ├── reprogramar ────────► RESOLVED
+  │
+  └── invalidar partido ──► RESOLVED
+14.7 ESTADOS DE SOLICITUD DE TORNEO
+ACTIVE
+   │
+   ├── seleccionada ───► SELECTED
+   │
+   ├── rechazada ──────► REJECTED
+   │
+   └── expirada ───────► EXPIRED
+Cuando el administrador utiliza una solicitud para crear un torneo:
+SELECTED
+    │
+    ▼
+TOURNAMENT_CREATED
+15. RELACIONES Y CARDINALIDADES
+USER 1 ─── 1 PROFILE
+USER N ─── N ROLE
+USER 1 ─── N TEAM_MEMBER
+TEAM 1 ─── N TEAM_MEMBER
+GAME 1 ─── N GAME_MODE
+GAME 1 ─── N TOURNAMENT
+GAME_MODE 1 ─── N TOURNAMENT
+TOURNAMENT 1 ─── N REGISTRATION
+REGISTRATION 1 ─── 0..1 PARTICIPANT
+TOURNAMENT 1 ─── N STAGE
+STAGE 1 ─── N ROUND
+ROUND 1 ─── N MATCH
+MATCH 1 ─── N MATCH_PARTICIPANT
+PARTICIPANT 1 ─── N MATCH_PARTICIPANT
+MATCH 1 ─── N MATCH_RESULT
+MATCH 1 ─── N DISPUTE
+USER 1 ─── N TOURNAMENT_REQUEST
+REQUEST 1 ─── N REQUEST_VOTE
+USER 1 ─── N RANKING
+GAME 1 ─── N RANKING
+16. DECISIONES IMPORTANTES DEL DISEÑO
+16.1 Participantes separados de inscripciones
+La separación:
+REGISTRATION
+      ↓
+PARTICIPANT
+permite manejar validaciones, pagos y futuras listas de espera sin romper la estructura competitiva.
+16.2 Participantes separados de partidos
+La relación:
+MATCH
+   ↓
+MATCH_PARTICIPANTS
+es más flexible que guardar directamente:
+player_1_id
+player_2_id
+Esto facilitará:
+Equipos.
+Participantes individuales.
+Diferentes formatos competitivos.
+Estadísticas futuras.
+16.3 Etapas separadas de torneos
+La entidad:
+TOURNAMENT_STAGE
+permite que en el futuro exista:
+FASE DE GRUPOS
+      ↓
+ELIMINACIÓN DIRECTA
+sin rediseñar el modelo completo.
+17. RECOMENDACIONES PARA EL MVP
+Aunque la arquitectura debe quedar preparada para crecer, el MVP debe implementar realmente:
+Registro y autenticación.
+Roles básicos.
+Perfiles.
+Juegos y modalidades.
+Solicitudes comunitarias.
+Votaciones.
+Equipos.
+Torneos.
+Inscripciones.
+Eliminación directa.
+Partidos.
+Resultados.
+Disputas.
+Rankings.
+Se recomienda dejar en el modelo, pero no desarrollar completamente:
+Pagos avanzados.
+Etapas múltiples.
+Formatos competitivos adicionales.
+Patrocinios.
+Temporadas.
+Rankings regionales.
+Streaming.
+18. PRÓXIMO PASO
+Con esta especificación, TopRival ya tiene una base suficientemente sólida para iniciar el diseño del producto.
+El siguiente paso será construir:
+Especificación UX y Wireframes
+Comenzando por:
+LANDING
+   ↓
+REGISTRO / LOGIN
+   ↓
+ONBOARDING
+   ↓
+DASHBOARD
+   ↓
+EXPLORAR TORNEOS
+   ↓
+DETALLE DEL TORNEO
+   ↓
+INSCRIPCIÓN
+   ↓
+MIS TORNEOS
+   ↓
+PARTIDO
+   ↓
+RESULTADO
+Después se diseñará el flujo del:
+PANEL ADMINISTRATIVO
+para la gestión completa de la plataforma.
+
+
+====================================
+FILE: TOPRIVAL - DT.docx
+====================================
+
+TOPRIVAL
+Documento Técnico y Funcional del Producto
+Versión: 1.0
+Estado: Planificación
+Tipo de producto: Plataforma web de torneos gamer
+Arquitectura inicial: Monolito modular
+Mercado inicial: Colombia, con proyección a Latinoamérica
+1. VISIÓN GENERAL DEL PROYECTO
+1.1 Nombre del producto
+TopRival
+1.2 Concepto
+TopRival es una plataforma web de competencias gamer que permite a los jugadores descubrir, solicitar e inscribirse en torneos oficiales organizados y gestionados directamente por la plataforma.
+A diferencia de plataformas abiertas en las que cualquier usuario puede crear un torneo, en TopRival la creación, configuración, administración y monetización de los torneos estará centralizada en el equipo administrativo de la plataforma.
+La comunidad tendrá un papel activo en la toma de decisiones mediante un sistema de solicitudes y votaciones de futuros torneos.
+1.3 Visión
+Convertirse en una de las principales plataformas de competencias gamer de Latinoamérica, conectando jugadores con torneos profesionales, organizados y basados en la demanda real de la comunidad.
+1.4 Misión
+Ofrecer una experiencia competitiva gamer confiable y accesible mediante la organización centralizada de torneos, sistemas automatizados de competición, rankings y participación activa de la comunidad.
+2. PROPUESTA DE VALOR
+2.1 Propuesta central
+TopRival permite a los gamers competir en torneos oficiales, organizados profesionalmente y creados teniendo en cuenta los intereses reales de la comunidad.
+La plataforma se encarga de:
+Crear torneos.
+Definir reglas.
+Gestionar inscripciones.
+Gestionar pagos.
+Crear brackets.
+Administrar partidos.
+Validar resultados.
+Resolver conflictos.
+Actualizar rankings.
+Gestionar premios.
+Los jugadores pueden:
+Descubrir torneos.
+Inscribirse.
+Crear o gestionar equipos.
+Competir.
+Consultar brackets.
+Reportar resultados.
+Consultar rankings.
+Solicitar futuros torneos.
+Votar por solicitudes de la comunidad.
+3. MODELO DE PARTICIPACIÓN COMUNITARIA
+TopRival funcionará bajo un modelo de demanda comunitaria.
+COMUNIDAD
+    ↓
+SOLICITA UN TORNEO
+    ↓
+INDICA JUEGO Y MODALIDAD
+    ↓
+PROPONE FECHA Y HORARIO
+    ↓
+LA PLATAFORMA ANALIZA LA DEMANDA
+    ↓
+EL ADMINISTRADOR CREA EL TORNEO OFICIAL
+    ↓
+SE ABREN INSCRIPCIONES
+    ↓
+LA COMUNIDAD COMPITE
+3.1 Principio fundamental
+La comunidad puede solicitar torneos.
+La comunidad no puede crear torneos oficiales directamente.
+Solamente los usuarios autorizados de TopRival podrán:
+Crear.
+Publicar.
+Modificar.
+Cancelar.
+Monetizar.
+Gestionar.
+torneos dentro de la plataforma.
+4. USUARIOS DEL SISTEMA
+4.1 Jugador
+Es el usuario principal de la plataforma.
+Puede:
+Registrarse.
+Iniciar sesión.
+Gestionar su perfil.
+Crear equipos.
+Unirse a equipos.
+Inscribirse en torneos.
+Solicitar torneos.
+Votar por solicitudes.
+Participar en partidos.
+Reportar resultados.
+Presentar disputas.
+Consultar rankings.
+4.2 Capitán de equipo
+Es un jugador con permisos adicionales sobre un equipo.
+Puede:
+Gestionar integrantes.
+Invitar jugadores.
+Eliminar integrantes.
+Gestionar inscripciones del equipo.
+Representar al equipo dentro de determinadas acciones competitivas.
+4.3 Moderador
+Usuario encargado de apoyar la operación de los torneos.
+Puede:
+Revisar reportes.
+Revisar conflictos.
+Moderar usuarios.
+Aplicar determinadas sanciones.
+Escalar casos complejos al administrador.
+4.4 Administrador
+Usuario con control administrativo de la plataforma.
+Puede:
+Gestionar usuarios.
+Gestionar videojuegos.
+Gestionar modalidades.
+Crear torneos.
+Publicar torneos.
+Cancelar torneos.
+Gestionar inscripciones.
+Generar brackets.
+Resolver disputas.
+Gestionar rankings.
+Gestionar pagos.
+Analizar solicitudes comunitarias.
+5. MÓDULOS DEL MVP
+5.1 Módulo de autenticación
+Funciones:
+Registro.
+Inicio de sesión.
+Cierre de sesión.
+Recuperación de contraseña.
+Restablecimiento de contraseña.
+Verificación de correo.
+Control de sesiones.
+Control de roles.
+5.2 Módulo de perfiles
+Cada jugador tendrá:
+Nickname.
+Nombre visible.
+Avatar.
+Biografía.
+País.
+Ciudad.
+Juegos favoritos.
+Estadísticas.
+Historial competitivo.
+5.3 Módulo de videojuegos
+El administrador podrá gestionar:
+Videojuegos.
+Categorías.
+Modalidades.
+Ejemplo:
+VALORANT
+    ├── 1v1
+    ├── 2v2
+    └── 5v5
+5.4 Módulo de torneos
+Funciones públicas:
+Consultar torneos.
+Filtrar torneos.
+Consultar detalles.
+Consultar reglas.
+Consultar participantes.
+Consultar brackets.
+Consultar partidos.
+Funciones administrativas:
+Crear.
+Editar.
+Publicar.
+Pausar.
+Cancelar.
+Finalizar.
+5.5 Módulo de solicitudes comunitarias
+Un jugador podrá solicitar un futuro torneo indicando:
+Videojuego.
+Modalidad.
+Tipo de competición.
+Fecha aproximada.
+Horario aproximado.
+Comentario opcional.
+Ejemplo:
+Juego: Valorant
+Modalidad: 5v5
+Fecha preferida: Próximo sábado
+Hora preferida: 8:00 PM
+5.6 Módulo de votaciones
+Los usuarios podrán apoyar solicitudes existentes.
+El objetivo será medir la demanda real.
+Ejemplo:
+Valorant 5v5
+Solicitado por:
+245 usuarios
+Fecha más solicitada:
+Sábado
+Horario más solicitado:
+8:00 PM
+5.7 Módulo de equipos
+Funciones:
+Crear equipo.
+Editar equipo.
+Invitar jugador.
+Aceptar invitación.
+Abandonar equipo.
+Expulsar jugador.
+Cambiar capitán.
+5.8 Módulo de inscripciones
+Los participantes podrán:
+Inscribirse individualmente.
+Inscribir equipos cuando la modalidad lo requiera.
+Consultar el estado de inscripción.
+Cancelar una inscripción según las reglas del torneo.
+5.9 Módulo de brackets
+El MVP incluirá:
+Eliminación directa.
+Gestión automática de rondas.
+Avance automático del ganador.
+Visualización pública.
+Posteriormente se podrán agregar:
+Doble eliminación.
+Round Robin.
+Sistema suizo.
+5.10 Módulo de partidos
+Cada partido tendrá:
+Participante uno.
+Participante dos.
+Ronda.
+Fecha.
+Hora.
+Estado.
+Resultado.
+Ganador.
+5.11 Módulo de resultados
+Flujo:
+JUGADOR/CAPITÁN
+      ↓
+REPORTA RESULTADO
+      ↓
+RIVAL CONFIRMA
+      ↓
+RESULTADO OFICIAL
+      ↓
+BRACKET SE ACTUALIZA
+Si existe un conflicto:
+RESULTADO RECHAZADO
+      ↓
+DISPUTA
+      ↓
+MODERADOR
+      ↓
+ADMINISTRADOR SI ES NECESARIO
+5.12 Módulo de rankings
+El sistema registrará:
+Puntos.
+Victorias.
+Derrotas.
+Torneos jugados.
+Posición.
+Inicialmente se implementará un ranking individual por videojuego.
+En fases futuras podrán existir:
+Rankings por equipos.
+Rankings regionales.
+Rankings por temporada.
+6. ARQUITECTURA TECNOLÓGICA
+6.1 Stack principal
+Frontend
+Next.js
+TypeScript
+Tailwind CSS
+TanStack Query
+React Hook Form
+Zod
+Axios
+Backend
+Java
+Spring Boot
+Spring Security
+Spring Data JPA
+Hibernate
+JWT
+Base de datos
+PostgreSQL
+Infraestructura
+Docker
+Docker Compose
+7. ARQUITECTURA GENERAL
+                    ┌───────────────────┐
+                    │     USUARIO       │
+                    └─────────┬─────────┘
+                              │
+                              ▼
+                    ┌───────────────────┐
+                    │      NEXT.JS      │
+                    │     FRONTEND      │
+                    └─────────┬─────────┘
+                              │
+                            HTTPS
+                              │
+                              ▼
+                    ┌───────────────────┐
+                    │   SPRING BOOT API │
+                    └─────────┬─────────┘
+                              │
+               ┌──────────────┼──────────────┐
+               │              │              │
+               ▼              ▼              ▼
+         PostgreSQL          Redis       File Storage
+Redis y el almacenamiento externo podrán incorporarse inicialmente o en una fase posterior, según las necesidades reales del MVP.
+8. ARQUITECTURA DEL BACKEND
+TopRival comenzará con un monolito modular.
+toprival-backend
+│
+├── auth
+├── users
+├── games
+├── teams
+├── tournaments
+├── registrations
+├── matches
+├── rankings
+├── tournament_requests
+├── notifications
+├── payments
+├── admin
+│
+├── config
+├── security
+├── shared
+└── exceptions
+Cada módulo deberá mantener, cuando corresponda:
+controller
+service
+repository
+entity
+dto
+mapper
+La arquitectura interna seguirá el flujo:
+CONTROLLER
+     ↓
+SERVICE
+     ↓
+REPOSITORY
+     ↓
+DATABASE
+9. REGLAS DE NEGOCIO PRINCIPALES
+RN-01 — Creación de torneos
+Solo los usuarios con permisos administrativos pueden crear torneos.
+RN-02 — Publicación
+Un torneo no será visible públicamente hasta tener el estado PUBLISHED.
+RN-03 — Participación
+Un jugador solamente puede participar si cumple los requisitos definidos por el torneo.
+RN-04 — Equipos
+Un usuario no puede pertenecer al mismo equipo más de una vez.
+RN-05 — Inscripciones
+Un jugador o equipo no puede inscribirse más de una vez al mismo torneo.
+RN-06 — Pago
+Cuando un torneo sea pago, la inscripción no estará confirmada hasta que el pago sea validado.
+RN-07 — Generación de bracket
+El bracket solo podrá generarse cuando:
+Las inscripciones estén cerradas.
+Los participantes estén confirmados.
+El administrador autorice la generación.
+RN-08 — Resultado
+Un resultado deberá ser confirmado o validado antes de modificar oficialmente el bracket.
+RN-09 — Disputas
+Una disputa impedirá el avance automático hasta ser resuelta.
+RN-10 — Solicitudes
+Un usuario podrá solicitar torneos, pero no crearlos directamente.
+RN-11 — Votaciones
+Un usuario solo podrá votar una vez por una misma solicitud.
+10. MODELO DE BASE DE DATOS
+10.1 Entidades principales
+USERS
+PROFILES
+ROLES
+GAMES
+GAME_MODES
+TEAMS
+TEAM_MEMBERS
+TOURNAMENTS
+TOURNAMENT_RULES
+TOURNAMENT_REGISTRATIONS
+TOURNAMENT_PARTICIPANTS
+TOURNAMENT_ROUNDS
+MATCHES
+MATCH_RESULTS
+TOURNAMENT_REQUESTS
+TOURNAMENT_REQUEST_VOTES
+RANKINGS
+RANKING_HISTORY
+PAYMENTS
+11. MODELO DE RELACIONES
+USER
+ ├── PROFILE
+ ├── TEAM_MEMBER
+ ├── TOURNAMENT_REGISTRATION
+ ├── TOURNAMENT_REQUEST
+ ├── TOURNAMENT_REQUEST_VOTE
+ └── PAYMENT
+GAME
+ └── GAME_MODE
+      └── TOURNAMENT
+TOURNAMENT
+ ├── TOURNAMENT_RULE
+ ├── TOURNAMENT_REGISTRATION
+ ├── TOURNAMENT_PARTICIPANT
+ ├── TOURNAMENT_ROUND
+ └── MATCH
+TEAM
+ └── TEAM_MEMBER
+TOURNAMENT_ROUND
+ └── MATCH
+MATCH
+ └── MATCH_RESULT
+12. ESTADOS DEL SISTEMA
+12.1 Estado de un torneo
+DRAFT
+↓
+PUBLISHED
+↓
+REGISTRATION_OPEN
+↓
+REGISTRATION_CLOSED
+↓
+READY
+↓
+IN_PROGRESS
+↓
+FINISHED
+Estados alternativos:
+CANCELLED
+PAUSED
+12.2 Estado de una inscripción
+PENDING
+CONFIRMED
+REJECTED
+CANCELLED
+12.3 Estado de un partido
+PENDING
+SCHEDULED
+IN_PROGRESS
+RESULT_PENDING
+DISPUTED
+COMPLETED
+CANCELLED
+12.4 Estado de un resultado
+REPORTED
+CONFIRMED
+REJECTED
+DISPUTED
+APPROVED
+13. ALGORITMO DE BRACKET
+El MVP utilizará eliminación directa.
+Proceso
+Paso 1
+Cerrar inscripciones.
+Paso 2
+Obtener participantes confirmados.
+Paso 3
+Ordenar participantes.
+Inicialmente podrá utilizarse:
+Orden aleatorio.
+Posteriormente:
+Ranking.
+Seed competitivo.
+Paso 4
+Determinar tamaño del bracket.
+Ejemplo:
+8
+16
+32
+64
+Paso 5
+Crear la primera ronda.
+Ejemplo:
+A vs B
+C vs D
+E vs F
+G vs H
+Paso 6
+Crear las siguientes rondas.
+CUARTOS
+   ↓
+SEMIFINALES
+   ↓
+FINAL
+Paso 7
+Cuando un partido es completado:
+GANADOR
+   ↓
+ASIGNAR AL SIGUIENTE MATCH
+14. API PRINCIPAL
+Autenticación
+POST /api/v1/auth/register
+POST /api/v1/auth/login
+POST /api/v1/auth/refresh
+POST /api/v1/auth/logout
+POST /api/v1/auth/forgot-password
+POST /api/v1/auth/reset-password
+GET  /api/v1/auth/me
+Juegos
+GET /api/v1/games
+GET /api/v1/games/{slug}
+GET /api/v1/games/{id}/modes
+Torneos
+GET /api/v1/tournaments
+GET /api/v1/tournaments/{slug}
+GET /api/v1/tournaments/{id}/bracket
+GET /api/v1/tournaments/{id}/matches
+Inscripciones
+POST   /api/v1/tournaments/{id}/registrations
+GET    /api/v1/tournaments/{id}/registrations
+DELETE /api/v1/registrations/{id}
+Equipos
+POST   /api/v1/teams
+GET    /api/v1/teams/{id}
+PATCH  /api/v1/teams/{id}
+POST   /api/v1/teams/{id}/members
+DELETE /api/v1/teams/{id}/members/{userId}
+Solicitudes comunitarias
+POST /api/v1/tournament-requests
+GET  /api/v1/tournament-requests
+GET  /api/v1/tournament-requests/popular
+POST /api/v1/tournament-requests/{id}/vote
+Partidos
+GET  /api/v1/matches/{id}
+POST /api/v1/matches/{id}/results
+POST /api/v1/matches/{id}/confirm
+POST /api/v1/matches/{id}/dispute
+Rankings
+GET /api/v1/rankings
+GET /api/v1/rankings/{gameSlug}
+GET /api/v1/users/{id}/ranking
+Administración
+POST  /api/v1/admin/tournaments
+PATCH /api/v1/admin/tournaments/{id}
+DELETE /api/v1/admin/tournaments/{id}
+GET /api/v1/admin/dashboard
+GET /api/v1/admin/tournament-requests
+GET /api/v1/admin/disputes
+POST /api/v1/admin/matches/{id}/resolve
+15. ÉPICAS DEL MVP
+Épica 1 — Infraestructura
+Como equipo de desarrollo, queremos configurar la infraestructura base para poder comenzar el desarrollo del producto.
+Historias principales:
+Crear repositorios.
+Configurar Docker.
+Configurar PostgreSQL.
+Configurar variables de entorno.
+Configurar CI/CD básico.
+Épica 2 — Autenticación
+Como usuario, quiero registrarme e iniciar sesión para acceder a mi cuenta y participar en la plataforma.
+Épica 3 — Perfil de jugador
+Como jugador, quiero configurar mi perfil para tener una identidad competitiva dentro de TopRival.
+Épica 4 — Administración de videojuegos
+Como administrador, quiero gestionar videojuegos y modalidades para poder crear torneos correctamente.
+Épica 5 — Solicitudes comunitarias
+Como jugador, quiero solicitar futuros torneos para influir en las competencias que organizará TopRival.
+Épica 6 — Gestión de torneos
+Como administrador, quiero crear y publicar torneos para permitir que la comunidad pueda participar.
+Épica 7 — Inscripciones
+Como jugador, quiero inscribirme en un torneo para poder participar en la competencia.
+Épica 8 — Equipos
+Como jugador, quiero crear o unirme a un equipo para participar en torneos grupales.
+Épica 9 — Competición
+Como participante, quiero consultar mi bracket y partidos para conocer mi progreso en el torneo.
+Épica 10 — Resultados
+Como participante, quiero reportar y confirmar resultados para avanzar dentro del torneo.
+Épica 11 — Rankings
+Como jugador, quiero consultar mi posición competitiva para conocer mi progreso frente a otros jugadores.
+16. BACKLOG PRIORIZADO
+Prioridad P0 — Obligatorio para MVP
+Infraestructura.
+Autenticación.
+Roles.
+Perfiles.
+Videojuegos.
+Modalidades.
+Solicitudes de torneos.
+Panel administrativo.
+Creación de torneos.
+Publicación de torneos.
+Inscripciones.
+Bracket de eliminación directa.
+Gestión de partidos.
+Resultados.
+Confirmación.
+Disputas.
+Ranking básico.
+Prioridad P1 — Segunda versión
+Pagos.
+Notificaciones.
+Sistema avanzado de puntos.
+Estadísticas.
+Historial competitivo.
+Búsqueda avanzada.
+Logros.
+Prioridad P2 — Futuro
+Aplicación móvil.
+Streaming integrado.
+Doble eliminación.
+Sistema suizo.
+Round Robin.
+Rankings por temporada.
+Patrocinios.
+Marketplace.
+API pública.
+17. ROADMAP DE DESARROLLO
+FASE 0 — PRODUCTO Y DISEÑO
+Duración estimada: 1 a 2 semanas.
+Objetivos:
+Definir marca.
+Definir requisitos.
+Crear wireframes.
+Diseñar base de datos.
+Crear backlog.
+Definir arquitectura.
+FASE 1 — INFRAESTRUCTURA
+Duración estimada: 1 a 2 semanas.
+Entregables:
+Frontend funcionando.
+Backend funcionando.
+PostgreSQL funcionando.
+Docker configurado.
+Autenticación base.
+FASE 2 — USUARIOS Y COMUNIDAD
+Duración estimada: 2 semanas.
+Entregables:
+Registro.
+Login.
+Perfil.
+Juegos.
+Solicitudes de torneos.
+Votaciones.
+FASE 3 — ADMINISTRACIÓN Y TORNEOS
+Duración estimada: 2 semanas.
+Entregables:
+Dashboard administrativo.
+Gestión de juegos.
+Gestión de modalidades.
+Creación de torneos.
+Publicación.
+FASE 4 — INSCRIPCIONES Y EQUIPOS
+Duración estimada: 2 a 3 semanas.
+Entregables:
+Creación de equipos.
+Invitaciones.
+Inscripciones.
+Validaciones.
+FASE 5 — MOTOR DE COMPETICIÓN
+Duración estimada: 3 a 4 semanas.
+Entregables:
+Generación de bracket.
+Rondas.
+Partidos.
+Avance automático.
+FASE 6 — RESULTADOS Y RANKINGS
+Duración estimada: 2 semanas.
+Entregables:
+Reporte de resultados.
+Confirmación.
+Disputas.
+Rankings.
+FASE 7 — MONETIZACIÓN
+Duración estimada: 2 a 3 semanas.
+Entregables:
+Integración de pagos.
+Validación de pagos.
+Inscripciones pagas.
+Historial de transacciones.
+18. PRINCIPIO DE DESARROLLO
+El desarrollo de TopRival deberá priorizar siempre el flujo principal:
+REGISTRO
+   ↓
+DESCUBRIMIENTO DEL TORNEO
+   ↓
+INSCRIPCIÓN
+   ↓
+CONFIRMACIÓN
+   ↓
+BRACKET
+   ↓
+PARTIDO
+   ↓
+RESULTADO
+   ↓
+AVANCE
+   ↓
+RANKING
+Si este flujo funciona correctamente, TopRival tendrá un MVP competitivo funcional.
+19. OBJETIVO DEL MVP
+El MVP no busca incluir todas las funcionalidades posibles.
+Su objetivo es validar tres aspectos:
+1. ¿Las personas quieren participar?
+2. ¿Las personas confían en la organización de TopRival?
+3. ¿Las personas están dispuestas a pagar por participar?
+Las funcionalidades futuras deberán ser priorizadas según los resultados obtenidos.
+20. DEFINICIÓN DE ÉXITO INICIAL
+El MVP podrá considerarse validado cuando la plataforma consiga:
+Usuarios registrados de forma recurrente.
+Participación constante.
+Torneos completados correctamente.
+Baja cantidad de disputas sin resolver.
+Usuarios que regresan.
+Demanda mediante solicitudes.
+Primeros ingresos sostenibles.
+DOCUMENTO VIVO
+Este documento representa la arquitectura funcional y técnica inicial de TopRival.
+Deberá actualizarse cuando:
+Cambien las reglas de negocio.
+Se incorporen nuevos módulos.
+Se modifique la arquitectura.
+Se descubran nuevas necesidades durante el desarrollo.
+La validación con usuarios indique cambios en el producto.
+La filosofía del proyecto será:
+Construir lo necesario para validar, medir el comportamiento de los usuarios y evolucionar basándose en datos reales.
+
+
+====================================
+FILE: Wireframe #1.docx
+====================================
+
+Perfecto. Para TopRival, esta fase es clave porque aquí vamos a convertir toda la arquitectura técnica en una experiencia de usuario coherente. Te propongo separar la navegación en público, jugador, capitán y administrador, y hacer que el torneo cambie la interfaz según su estado.
+🏆 TopRival — Mapa de pantallas y navegación
+1. Arquitectura general de navegación
+La plataforma debería tener cuatro experiencias principales:
+                         TOPRIVAL
+                            │
+          ┌─────────────────┼─────────────────┐
+          │                 │                 │
+          ▼                 ▼                 ▼
+       PÚBLICO          AUTENTICADO         ADMIN
+          │                 │                 │
+          │          ┌──────┴──────┐          │
+          │          ▼             ▼          │
+          │       JUGADOR      CAPITÁN        │
+          │                                    │
+          └────────────────────────────────────┘
+Hay que tener en cuenta algo importante:
+CAPITÁN no debería ser un rol de seguridad independiente.
+Un usuario puede ser:
+Jugador
++
+Capitán de equipo
++
+Administrador
+dependiendo de sus permisos/contexto.
+2. Navegación pública
+Estas pantallas deben poder consultarse sin iniciar sesión.
+/
+│
+├── /tournaments
+│
+├── /tournaments/:slug
+│
+├── /games
+│
+├── /games/:slug
+│
+├── /rankings
+│
+├── /players/:nickname
+│
+├── /teams/:tag
+│
+├── /requests
+│
+├── /requests/:id
+│
+├── /about
+│
+├── /rules
+│
+├── /faq
+│
+├── /contact
+│
+├── /login
+├── /register
+├── /forgot-password
+└── /verify-email
+3. Home de TopRival
+La Home debería vender la plataforma en pocos segundos.
+Estructura recomendada
+┌─────────────────────────────────────┐
+│ TOPRIVAL       Torneos  Ranking     │
+│               Juegos       Login    │
+├─────────────────────────────────────┤
+│                                     │
+│       COMPITE. SUPERA. DOMINA.      │
+│                                     │
+│   Participa en torneos gamer        │
+│   y demuestra quién es el mejor.    │
+│                                     │
+│      [ VER TORNEOS ]                │
+│      [ CREAR CUENTA ]               │
+│                                     │
+├─────────────────────────────────────┤
+│ 🔴 TORNEOS EN VIVO                 │
+├─────────────────────────────────────┤
+│ Próximos torneos                   │
+├─────────────────────────────────────┤
+│ Juegos disponibles                 │
+├─────────────────────────────────────┤
+│ Ranking TopRival                   │
+├─────────────────────────────────────┤
+│ Solicita el próximo torneo         │
+└─────────────────────────────────────┘
+4. Torneos públicos
+/tournaments
+Debe funcionar como el marketplace competitivo de TopRival.
+Filtros:
+Juego
+Modalidad
+Estado
+Fecha
+Tipo
+Premio
+Costo
+Cupos disponibles
+Tarjeta:
+┌────────────────────────────┐
+│ 🎮 FREE FIRE               │
+│                            │
+│ TopRival Championship      │
+│ Squad • 32 equipos         │
+│                            │
+│ 🗓 15 SEP                  │
+│ 🏆 $500.000 COP            │
+│ 👥 24/32                   │
+│                            │
+│ [ VER TORNEO ]             │
+└────────────────────────────┘
+5. Detalle del torneo
+/tournaments/:slug
+Esta será una de las pantallas más importantes.
+Debe tener tabs:
+┌────────────────────────────────────────────┐
+│ BANNER                                     │
+│                                            │
+│ TOPRIVAL CHAMPIONSHIP                     │
+│ Free Fire • Squad                         │
+│                                            │
+│ [ INSCRIBIRME ]                            │
+├────────────────────────────────────────────┤
+│ RESUMEN | BRACKET | PARTICIPANTES | REGLAS│
+└────────────────────────────────────────────┘
+Contenido:
+Resumen
+Fecha
+Hora
+Premio
+Cupos
+Costo
+Formato
+Estado
+Bracket
+Visualización del árbol competitivo.
+Participantes
+Jugadores/equipos confirmados.
+Reglas
+Reglamento oficial.
+6. Login y registro
+/login
+/register
+Registro:
+Nombre
+Nickname
+Email
+Password
+Confirmar password
+☐ Acepto términos
+[ CREAR CUENTA ]
+Después:
+REGISTER
+   ↓
+VERIFY EMAIL
+   ↓
+LOGIN
+   ↓
+2FA
+   ↓
+DASHBOARD
+7. Autenticación 2FA
+Dependiendo de la configuración:
+                 LOGIN
+                   │
+                   ▼
+               PASSWORD
+                   │
+                   ▼
+                  2FA
+                   │
+       ┌───────────┼───────────┐
+       ▼           ▼           ▼
+    TOTP         EMAIL         SMS
+       │           │           │
+       └───────────┼───────────┘
+                   ▼
+               DASHBOARD
+Pantalla:
+┌─────────────────────────────┐
+│ Verificación de seguridad   │
+│                             │
+│ Introduce tu código         │
+│                             │
+│        [ _ _ _ _ _ _ ]      │
+│                             │
+│ [ VERIFICAR ]               │
+│                             │
+│ Usar otro método            │
+└─────────────────────────────┘
+8. Dashboard del jugador
+Ruta:
+/dashboard
+Contenido:
+┌─────────────────────────────────────┐
+│ Hola, Ryan 👋                       │
+├─────────────────────────────────────┤
+│                                     │
+│ 🏆 Torneos jugados       18         │
+│ 🥇 Victorias             11         │
+│ 📊 Ranking               #127       │
+│ ⭐ Puntos                1.840      │
+│                                     │
+├─────────────────────────────────────┤
+│ MIS PRÓXIMOS TORNEOS                │
+│                                     │
+│ Free Fire Cup       15 Sep         │
+│ Valorant Clash      21 Sep         │
+├─────────────────────────────────────┤
+│ HISTORIAL                           │
+├─────────────────────────────────────┤
+│ ACTIVIDAD                           │
+└─────────────────────────────────────┘
+9. Navegación del jugador
+DASHBOARD
+│
+├── Perfil
+│
+├── Mis torneos
+│   ├── Próximos
+│   ├── En curso
+│   └── Historial
+│
+├── Mis equipos
+│
+├── Ranking
+│
+├── Solicitudes
+│
+├── Notificaciones
+│
+└── Configuración
+    ├── Cuenta
+    ├── Seguridad
+    ├── 2FA
+    └── Privacidad
+10. Perfil del jugador
+/profile
+Debe mostrar:
+Avatar
+Nickname
+País
+Ranking
+Torneos
+Victorias
+Derrotas
+Títulos
+Historial competitivo
+Y públicamente:
+/players/:nickname
+11. Equipos
+Mis equipos
+/teams
+┌──────────────────────────────┐
+│ MIS EQUIPOS                  │
+│                              │
+│ 🔥 Team Alpha                │
+│ Captain                      │
+│ 5 miembros                   │
+│                              │
+│ [ VER EQUIPO ]               │
+└──────────────────────────────┘
+12. Panel del capitán
+Cuando el usuario sea capitán, aparecerán funcionalidades adicionales.
+/team/:id/manage
+EQUIPO
+│
+├── Resumen
+├── Miembros
+├── Invitaciones
+├── Torneos
+├── Historial
+└── Configuración
+Importante
+El capitán puede:
+Invitar jugadores.
+Retirar jugadores antes de una inscripción competitiva.
+Gestionar información del equipo.
+Consultar torneos.
+Gestionar inscripciones.
+Pero:
+Una vez confirmada la inscripción al torneo, la plantilla queda congelada.
+13. Solicitar torneo
+La comunidad no crea torneos.
+La pantalla será:
+/requests/new
+Formulario:
+Juego
+Modalidad
+Formato
+Fecha estimada
+Hora estimada
+Comentario
+[ SOLICITAR TORNEO ]
+Después:
+SOLICITUD
+     ↓
+PUBLICADA
+     ↓
+VOTACIONES
+     ↓
+ADMIN REVISA
+     ↓
+APROBADA
+     ↓
+TORNEO OFICIAL
+14. Página de solicitud
+/requests/:id
+Ejemplo:
+┌──────────────────────────────────────┐
+│ 🏆 SOLICITUD                         │
+│                                      │
+│ Torneo Free Fire Squad               │
+│                                      │
+│ 📅 20 septiembre                     │
+│ 🕘 7:00 PM                            │
+│                                      │
+│ 👥 87 personas interesadas           │
+│                                      │
+│ [ 👍 APOYAR ]                         │
+│                                      │
+│ Estado: EN EVALUACIÓN                │
+└──────────────────────────────────────┘
+15. Pantalla crítica: inscripción
+Cuando un usuario presione:
+INSCRIBIRME
+el sistema debe detectar:
+¿Individual?
+        │
+        ▼
+Confirmar jugador
+¿Equipo?
+        │
+        ▼
+Seleccionar equipo
+        │
+        ▼
+Verificar plantilla
+        │
+        ▼
+Confirmar inscripción
+16. Último cupo
+Esta pantalla merece un estado especial.
+⚠️ ÚLTIMO CUPO DISPONIBLE
+Hay varios jugadores intentando obtener
+el último cupo.
+Tu solicitud ha sido recibida.
+La asignación se realizará según la
+prioridad competitiva de TopRival.
+Estado:
+🟡 EN EVALUACIÓN
+Después:
+GANADOR
+   ↓
+INSCRIPCIÓN CONFIRMADA
+o:
+NO SELECCIONADO
+   ↓
+CUPO NO ASIGNADO
+Esto debe explicarse claramente para evitar reclamos.
+17. Estados especiales del torneo
+Aquí recomiendo distinguir estado del torneo, estado de inscripción, estado del partido y estado del participante.
+No debemos intentar meter todo dentro de TOURNAMENT_STATUS.
+18. Máquina de estados del torneo
+La versión definitiva:
+                         ┌─────────┐
+                         │  DRAFT  │
+                         └────┬────┘
+                              │
+                           PUBLICAR
+                              │
+                              ▼
+                       ┌─────────────┐
+                       │  PUBLISHED  │
+                       └──────┬──────┘
+                              │
+                      ABRIR INSCRIPCIÓN
+                              │
+                              ▼
+                  ┌──────────────────────┐
+                  │ REGISTRATION_OPEN    │
+                  └──────────┬───────────┘
+                             │
+                    CIERRE DE INSCRIPCIÓN
+                             │
+                             ▼
+                  ┌──────────────────────┐
+                  │ REGISTRATION_CLOSED  │
+                  └──────────┬───────────┘
+                             │
+                    GENERAR BRACKET
+                             │
+                             ▼
+                       ┌──────────┐
+                       │  READY   │
+                       └────┬─────┘
+                            │
+                         INICIAR
+                            │
+                            ▼
+                    ┌──────────────┐
+                    │ IN_PROGRESS  │
+                    └──────┬───────┘
+                           │
+               ┌───────────┴───────────┐
+               │                       │
+             PAUSAR                  FINALIZAR
+               │                       │
+               ▼                       ▼
+          ┌─────────┐             ┌──────────┐
+          │ PAUSED  │             │ FINISHED │
+          └────┬────┘             └──────────┘
+               │
+             REANUDAR
+               │
+               └──────────────► IN_PROGRESS
+Cancelación:
+DRAFT ───────────────► CANCELLED
+PUBLISHED ───────────► CANCELLED
+REGISTRATION_OPEN ───► CANCELLED
+REGISTRATION_CLOSED ─► CANCELLED
+READY ────────────────► CANCELLED
+PAUSED ───────────────► CANCELLED
+No recomiendo permitir:
+IN_PROGRESS → DRAFT
+FINISHED → cualquier estado anterior
+19. Estado de inscripción
+Independiente del torneo:
+PENDING
+   │
+   ├── APPROVED → CONFIRMED
+   │
+   ├── REJECTED
+   │
+   └── CANCELLED
+Para pagos:
+PENDING
+   │
+   ▼
+PAYMENT_PENDING
+   │
+   ▼
+CONFIRMED
+Esto será especialmente importante cuando monetización entre en producción.
+20. Estado del participante
+REGISTERED
+     │
+     ▼
+CONFIRMED
+     │
+     ▼
+ACTIVE
+     │
+ ┌───┼────────────┐
+ ▼   ▼            ▼
+WIN ELIMINATED   DISQUALIFIED
+ │
+ ▼
+WINNER
+También:
+ACTIVE → WITHDRAWN
+21. Estado del partido
+PENDING
+   │
+   ▼
+SCHEDULED
+   │
+   ▼
+IN_PROGRESS
+   │
+   ▼
+RESULT_PENDING
+   │
+   ├─────────────┐
+   ▼             ▼
+COMPLETED      DISPUTED
+                  │
+                  ▼
+             ADMIN_REVIEW
+                  │
+                  ▼
+               COMPLETED
+También:
+SCHEDULED → CANCELLED
+PENDING → VOID
+22. Estado especial: BYE
+El BYE no necesita una pantalla independiente.
+El bracket debe mostrar:
+┌──────────────────────┐
+│ Player A              │
+│ 🟢 AVANZA POR BYE     │
+│                       │
+│ Player B              │
+│ —                     │
+└──────────────────────┘
+Y el sistema:
+MATCH
+   ↓
+1 PARTICIPANTE
+   +
+1 SLOT VACÍO
+   ↓
+BYE
+   ↓
+AUTO ADVANCE
+23. Estado especial: espera de rival
+Este estado será muy importante visualmente.
+┌────────────────────────────┐
+│ 🟡 ESPERANDO RIVAL         │
+│                            │
+│ Has avanzado a la siguiente│
+│ ronda.                     │
+│                            │
+│ Tu rival será determinado  │
+│ cuando finalice el partido │
+│ correspondiente.           │
+└────────────────────────────┘
+24. Estado especial: resultado pendiente
+Después de jugar:
+MATCH FINISHED
+      ↓
+RESULT_PENDING
+La interfaz:
+┌────────────────────────────┐
+│ RESULTADO PENDIENTE        │
+│                            │
+│ Tu resultado fue enviado.  │
+│                            │
+│ Esperando confirmación...  │
+│                            │
+│ 🟡 EN REVISIÓN             │
+└────────────────────────────┘
+25. Estado especial: disputa
+Si existe conflicto:
+┌────────────────────────────┐
+│ ⚠️ PARTIDO EN DISPUTA      │
+│                            │
+│ El resultado fue enviado   │
+│ a revisión administrativa. │
+│                            │
+│ Evidencias: 2              │
+│ Estado: EN REVISIÓN        │
+└────────────────────────────┘
+26. Estado especial: torneo pausado
+┌────────────────────────────┐
+│ ⏸ TORNEO PAUSADO           │
+│                            │
+│ El torneo fue pausado por  │
+│ la administración.         │
+│                            │
+│ Próxima actualización:     │
+│ 8:00 PM                    │
+└────────────────────────────┘
+El bracket sigue visible, pero las acciones competitivas quedan bloqueadas.
+27. Estado especial: torneo finalizado
+🏆 TORNEO FINALIZADO
+CAMPEÓN
+🥇 Team Alpha
+2.º Team Beta
+3.º Team Omega
+Premio entregado
++500 Ranking Points
+Aquí podemos incorporar posteriormente:
+Premios
+Ranking
+Estadísticas
+Historial
+MVP
+Clips
+28. Panel administrativo
+Ruta:
+/admin
+El administrador tendrá una experiencia completamente diferente.
+ADMIN DASHBOARD
+│
+├── Overview
+│
+├── Torneos
+│   ├── Todos
+│   ├── Crear
+│   ├── En vivo
+│   ├── Próximos
+│   └── Finalizados
+│
+├── Solicitudes
+│
+├── Juegos
+│
+├── Usuarios
+│
+├── Equipos
+│
+├── Inscripciones
+│
+├── Partidos
+│
+├── Disputas
+│
+├── Rankings
+│
+├── Pagos
+│
+├── Reportes
+│
+└── Configuración
+29. Dashboard administrativo
+Debe mostrar métricas:
+┌────────────────────────────────────────┐
+│ TOPRIVAL ADMIN                         │
+├────────────────────────────────────────┤
+│                                        │
+│ Usuarios        12,458                 │
+│ Torneos activos     8                 │
+│ Jugadores activos 642                 │
+│ Ingresos       $X,XXX,XXX              │
+│                                        │
+├────────────────────────────────────────┤
+│ 🔴 TORNEOS EN VIVO                     │
+├────────────────────────────────────────┤
+│ ⚠ DISPUTAS PENDIENTES                 │
+├────────────────────────────────────────┤
+│ 📋 SOLICITUDES POPULARES               │
+├────────────────────────────────────────┤
+│ 💰 PAGOS PENDIENTES                    │
+└────────────────────────────────────────┘
+30. Administración de torneo
+/admin/tournaments/:id
+Tabs:
+RESUMEN
+CONFIGURACIÓN
+REGLAS
+INSCRIPCIONES
+PARTICIPANTES
+BRACKET
+PARTIDOS
+DISPUTAS
+PREMIOS
+AUDITORÍA
+Acciones dinámicas
+Dependiendo del estado:
+DRAFT
+→ PUBLICAR
+PUBLISHED
+→ ABRIR INSCRIPCIONES
+REGISTRATION_OPEN
+→ CERRAR INSCRIPCIONES
+REGISTRATION_CLOSED
+→ GENERAR BRACKET
+READY
+→ INICIAR
+IN_PROGRESS
+→ PAUSAR / FINALIZAR
+PAUSED
+→ REANUDAR
+FINISHED
+→ VER RESULTADOS
+Esto evita mostrar botones inválidos.
+31. Navegación móvil
+En móvil no utilizaría el mismo sidebar del desktop.
+Bottom navigation:
+┌─────────────────────────────────────┐
+│                                     │
+│             CONTENIDO               │
+│                                     │
+├─────────────────────────────────────┤
+│ 🏠      🏆       📊       👤        │
+│ Inicio  Torneos  Ranking  Perfil    │
+└─────────────────────────────────────┘
+Y un botón flotante/contextual para:
++ Solicitar torneo
+o:
++ Crear equipo
+según contexto.
+32. Mapa completo
+TOPRIVAL
+│
+├── PÚBLICO
+│   ├── Home
+│   ├── Torneos
+│   ├── Detalle torneo
+│   ├── Juegos
+│   ├── Rankings
+│   ├── Jugadores
+│   ├── Equipos
+│   ├── Solicitudes
+│   ├── FAQ
+│   └── Auth
+│
+├── JUGADOR
+│   ├── Dashboard
+│   ├── Perfil
+│   ├── Mis torneos
+│   ├── Mi torneo
+│   │   ├── Resumen
+│   │   ├── Bracket
+│   │   ├── Partido
+│   │   ├── Resultado
+│   │   └── Disputa
+│   ├── Equipos
+│   ├── Solicitudes
+│   ├── Ranking
+│   ├── Notificaciones
+│   └── Configuración
+│
+├── CAPITÁN
+│   ├── Equipo
+│   ├── Miembros
+│   ├── Invitaciones
+│   ├── Inscripciones
+│   └── Plantilla
+│
+└── ADMIN
+    ├── Dashboard
+    ├── Torneos
+    ├── Solicitudes
+    ├── Juegos
+    ├── Usuarios
+    ├── Equipos
+    ├── Inscripciones
+    ├── Brackets
+    ├── Partidos
+    ├── Disputas
+    ├── Rankings
+    ├── Pagos
+    ├── Reportes
+    └── Auditoría
+33. Regla UX fundamental de TopRival
+Hay una decisión que recomiendo adoptar como principio de diseño:
+El usuario nunca debería tener que entender la máquina de estados interna. Debe entender qué puede hacer ahora.
+Por ejemplo, en lugar de mostrar:
+TOURNAMENT_STATUS = REGISTRATION_CLOSED
+mostrar:
+🔒 Inscripciones cerradas
+El torneo comenzará el 15 de septiembre a las 7:00 PM.
+En lugar de:
+MATCH_STATUS = RESULT_PENDING
+mostrar:
+🟡 Resultado en revisión
+Estamos esperando la confirmación del resultado.
+Y en lugar de:
+MATCH.COMPLETION_TYPE = BYE
+mostrar:
+🟢 Avanzas automáticamente
+Tu rival no fue asignado en esta ronda.
+Esto hará que TopRival se sienta como una plataforma profesional y no como un sistema administrativo.
+El siguiente paso
+Con esto ya tenemos prácticamente todo el UX Information Architecture:
+ER → Arquitectura → API → Estados → Navegación → Pantallas.
+Ahora sí recomiendo pasar al Wireframe UX de TopRival, pero hacerlo pantalla por pantalla, empezando por el flujo más importante:
+HOME
+ ↓
+TORNEOS
+ ↓
+DETALLE DEL TORNEO
+ ↓
+INSCRIPCIÓN
+ ↓
+CONFIRMACIÓN
+ ↓
+DASHBOARD
+ ↓
+TORNEO
+ ↓
+BRACKET
+ ↓
+MATCH
+ ↓
+RESULTADO
+ ↓
+CAMPEÓN
+Ese flujo representa el core de negocio de TopRival y debería ser el primer wireframe que diseñemos antes de entrar a las pantallas secundarias.
+
+

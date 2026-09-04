@@ -1,0 +1,13 @@
+{
+  "description": "Provides intuitive design assistance by helping users create and refine visual projects quickly, ideal for beginners and professionals alike.",
+  "icons": {
+    "icon": "/favicon-16x16.png"
+  },
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
