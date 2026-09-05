@@ -88,7 +88,7 @@ export function RegistrationScreen({ onNavigate }: { onNavigate: (s: Screen) => 
 
       setCurrentIntent(intent);
 
-      // Intentar abrir Widget oficial de Wompi si está disponible
+      // Si el widget de Wompi está inyectado, intentar abrirlo
       if ((window as any).WidgetCheckout && intent.publicKey && intent.signature) {
         try {
           const checkout = new (window as any).WidgetCheckout({
@@ -119,20 +119,27 @@ export function RegistrationScreen({ onNavigate }: { onNavigate: (s: Screen) => 
               });
               onNavigate("confirmation");
             } else if (tx && tx.status === "DECLINED") {
-              showAlert("Transacción Declinada", "El pago no fue aprobado por el banco. Por favor intenta con otro método.", "warning");
+              showAlert("Transacción Declinada", "El pago no fue aprobado por la entidad financiera.", "warning");
+            } else if (tx && tx.status === "ERROR") {
+              showAlert("Error en Transacción", "Ocurrió un error al procesar la transacción con el banco.", "danger");
             }
           });
           setIsProcessing(false);
           return;
         } catch (widgetErr) {
-          console.warn("Wompi Widget fallback modal:", widgetErr);
+          console.warn("Wompi WidgetCheckout falló o fue bloqueado, abriendo pasarela modal interactiva:", widgetErr);
         }
       }
 
-      // Si el widget no cargó o está en entorno sandbox interactivo, abrir pasarela modal
+      // Si el widget no cargó o está en sandbox interactivo, abrir pasarela modal
       setPaymentModalOpen(true);
     } catch (err: any) {
-      showAlert("Error al iniciar pago", err.message || "No se pudo conectar con Wompi", "danger");
+      console.error("Detalle del error en pasarela:", err);
+      showAlert(
+        "Error en la Pasarela de Pago",
+        err.message || "No se pudo comunicar con el servidor de pagos. Por favor verifica tu conexión.",
+        "danger"
+      );
     } finally {
       setIsProcessing(false);
     }
@@ -312,14 +319,6 @@ export function RegistrationScreen({ onNavigate }: { onNavigate: (s: Screen) => 
                 required
                 hint="Debe coincidir exactamente con tu nombre en Valorant"
               />
-              <Input
-                label="Discord"
-                value={discord}
-                onChange={setDiscord}
-                placeholder="Usuario#0000"
-                required
-                hint="Para coordinación de partidos"
-              />
               {mode === "team" && (
                 <Select
                   label="Seleccionar equipo"
@@ -358,7 +357,6 @@ export function RegistrationScreen({ onNavigate }: { onNavigate: (s: Screen) => 
                 { label: "Juego", value: tournament.game },
                 { label: "Modalidad", value: mode === "solo" ? "Jugador Individual" : `Equipo: ${myTeam?.name || "Sin Clan"}` },
                 { label: "Capitán / Nick", value: nick },
-                { label: "Discord", value: discord },
                 { label: "Fecha de inicio", value: `${tournament.startDate} · ${tournament.startTime}` },
                 { label: "Costo de inscripción", value: tournament.entryFee || "Gratis" },
               ].map((r) => (
@@ -386,7 +384,7 @@ export function RegistrationScreen({ onNavigate }: { onNavigate: (s: Screen) => 
                     <div className="flex items-center gap-2">
                       <span className="text-lg">💳</span>
                       <div>
-                        <h4 className="text-sm font-bold text-[#FAFAFA]">Pasarela Oficial — Wompi Bancolombia</h4>
+                        <h4 className="text-sm font-bold text-[#FAFAFA]">Pasarela Oficial</h4>
                         <p className="text-[11px] text-[#71717A]">Pagos 100% seguros y encriptados en pesos colombianos</p>
                       </div>
                     </div>
@@ -442,12 +440,12 @@ export function RegistrationScreen({ onNavigate }: { onNavigate: (s: Screen) => 
           <Button fullWidth onClick={handleSubmit} disabled={isProcessing} className="justify-center font-bold">
             {isProcessing ? (
               <span className="flex items-center gap-2">
-                <span className="animate-spin text-sm">⏳</span> Conectando con Wompi...
+                <span className="animate-spin text-sm">⏳</span> Conectando con pasarela de pagos...
               </span>
             ) : step < 3 ? (
               "Continuar"
             ) : isPaidTournament ? (
-              `Pagar ${tournament.entryFee} con Wompi`
+              `Pagar ${tournament.entryFee} de inscripción`
             ) : (
               "Confirmar Inscripción Gratuita"
             )}
@@ -464,7 +462,7 @@ export function RegistrationScreen({ onNavigate }: { onNavigate: (s: Screen) => 
                     💳
                   </div>
                   <div>
-                    <h3 className="text-base font-bold text-[#FAFAFA]">Checkout Wompi</h3>
+                    <h3 className="text-base font-bold text-[#FAFAFA]">Checkout</h3>
                     <p className="text-xs text-[#71717A]">Transacción Segura Bancolombia</p>
                   </div>
                 </div>

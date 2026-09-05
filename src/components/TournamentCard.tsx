@@ -124,7 +124,17 @@ export function TournamentCard({
           <div className="flex items-center gap-1.5">
             <Icon.Trophy />
             <span className="text-[#F5B830] font-bold text-lg">
-              {tournament.prizePool || tournament.prize || "$0 USD"}
+              {(() => {
+                const entryFeeNum = parseInt(String(tournament.entryFee || "").replace(/\D/g, '')) || 0;
+                const isPaid = entryFeeNum > 0;
+                const maxCount = tournament.maxParticipants ?? 16;
+                const dynamicPrize = isPaid ? (entryFeeNum * maxCount * 0.50) : 0;
+                
+                if (isPaid && (!tournament.prizePool || tournament.prizePool === "$0 USD" || tournament.prizePool === "")) {
+                  return `$${Math.round(dynamicPrize).toLocaleString('es-CO')} COP`;
+                }
+                return tournament.prizePool || tournament.prize || "$0 USD";
+              })()}
             </span>
           </div>
           {tournament.entryFee && !["gratis", "free", "$0", "0"].includes(String(tournament.entryFee).toLowerCase().trim()) ? (

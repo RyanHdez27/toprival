@@ -62,6 +62,18 @@ export function TournamentDetailScreen({ onNavigate }: { onNavigate: (s: Screen)
     }
   };
 
+  const entryFeeNum = parseInt(String(tournament.entryFee || "").replace(/\D/g, '')) || 0;
+  const isPaid = entryFeeNum > 0;
+  const totalPool = entryFeeNum * maxCount;
+  
+  // Prize calculations (50% platform, 50% distributed)
+  const totalPrizePool = totalPool * 0.50;
+  const firstPlacePrize = totalPool * 0.40;
+  const mostKillsPrize = totalPool * 0.06;
+  const secondPlacePrize = totalPool * 0.04;
+  
+  const formatCurrency = (val: number) => `$${Math.round(val).toLocaleString('es-CO')} COP`;
+
   return (
     <div className="min-h-screen bg-[#09090B]">
       {/* Banner */}
@@ -115,9 +127,9 @@ export function TournamentDetailScreen({ onNavigate }: { onNavigate: (s: Screen)
           {/* Key info cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
-              { icon: <Icon.Trophy />, label: "Premio", value: tournament.prizePool, color: "text-[#F5B830]" },
+              { icon: <Icon.Trophy />, label: "Premio", value: isPaid ? formatCurrency(totalPrizePool) : (tournament.prizePool || "Honor y Gloria"), color: "text-[#F5B830]" },
               { icon: <Icon.Calendar />, label: "Fecha", value: tournament.startDate, color: "text-[#FAFAFA]" },
-              { icon: <Icon.CreditCard />, label: "Inscripción", value: tournament.entryFee || "Gratis", color: tournament.entryFee && tournament.entryFee !== "Gratis" ? "text-[#22C55E]" : "text-[#A1A1AA]" },
+              { icon: <Icon.CreditCard />, label: "Inscripción", value: tournament.entryFee || "Gratis", color: isPaid ? "text-[#22C55E]" : "text-[#A1A1AA]" },
               { icon: <Icon.Users />, label: "Cupos", value: `${currentCount} / ${maxCount}`, color: "text-[#F59E0B]" },
             ].map((item) => (
               <Card key={item.label} className="p-4">
@@ -275,16 +287,37 @@ export function TournamentDetailScreen({ onNavigate }: { onNavigate: (s: Screen)
               Premiación
             </h3>
             <div className="space-y-2">
-              {[
-                { pos: "🥇 1°", prize: "$200 USD" },
-                { pos: "🥈 2°", prize: "$100 USD" },
-                { pos: "🥉 3°", prize: "Puntos Ranking" },
-              ].map((p) => (
-                <div key={p.pos} className="flex justify-between text-sm">
-                  <span className="text-[#A1A1AA]">{p.pos}</span>
-                  <span className="font-semibold text-[#F5B830]">{p.prize}</span>
-                </div>
-              ))}
+              {isPaid ? (
+                <>
+                  {[
+                    { pos: "🥇 1° Puesto", prize: formatCurrency(firstPlacePrize) },
+                    { pos: "🔥 Más Kills", prize: formatCurrency(mostKillsPrize) },
+                    { pos: "🥈 2° Puesto", prize: formatCurrency(secondPlacePrize) },
+                  ].map((p) => (
+                    <div key={p.pos} className="flex justify-between text-sm">
+                      <span className="text-[#A1A1AA]">{p.pos}</span>
+                      <span className="font-semibold text-[#F5B830]">{p.prize}</span>
+                    </div>
+                  ))}
+                  <div className="pt-2 mt-2 border-t border-[#27272A] flex justify-between text-xs">
+                    <span className="text-[#71717A]">Bolsa de premios</span>
+                    <span className="font-medium text-[#A1A1AA]">{formatCurrency(totalPrizePool)}</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {[
+                    { pos: "🥇 1°", prize: "$200 USD" },
+                    { pos: "🥈 2°", prize: "$100 USD" },
+                    { pos: "🥉 3°", prize: "Puntos Ranking" },
+                  ].map((p) => (
+                    <div key={p.pos} className="flex justify-between text-sm">
+                      <span className="text-[#A1A1AA]">{p.pos}</span>
+                      <span className="font-semibold text-[#F5B830]">{p.prize}</span>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
           </Card>
         </div>

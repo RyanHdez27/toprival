@@ -669,7 +669,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       mode: newTourney.mode || "5v5",
       isTeamBased: newTourney.isTeamBased ?? true,
       entryFee: newTourney.entryFee || "Gratis",
-      prizePool: newTourney.prizePool || "500 USD",
+      prizePool: newTourney.prizePool || "",
       prizeDistribution: newTourney.prizeDistribution || [
         { place: "1er Lugar", amount: "350 USD", percentage: 70 },
         { place: "2do Lugar", amount: "150 USD", percentage: 30 },

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import { Button, Badge, Icon, Card } from "../components/ui";
 import { TournamentModel, TournamentStatus } from "../types";
@@ -123,7 +123,7 @@ export function AdminScreen() {
   const [game, setGame] = useState("FreeFire");
   const [mode, setMode] = useState("Battle Royale — Escuadra (4v4)");
   const [seriesType, setSeriesType] = useState<"Bo1" | "Bo3" | "Bo5">("Bo3");
-  const [prizePool, setPrizePool] = useState("$500 USD");
+  const [prizePool, setPrizePool] = useState("");
   const [entryFee, setEntryFee] = useState("Gratis");
   const [maxParticipants, setMaxParticipants] = useState(16);
   const [startDate, setStartDate] = useState("15 Sep 2026");
@@ -134,6 +134,15 @@ export function AdminScreen() {
   // Estado para gestión de disputas
   const [disputeNotes, setDisputeNotes] = useState("");
   const [bracketSeriesType, setBracketSeriesType] = useState<"Bo1" | "Bo3" | "Bo5">("Bo3");
+
+  useEffect(() => {
+    const feeNum = parseInt(String(entryFee).replace(/\D/g, '')) || 0;
+    if (feeNum > 0) {
+      const totalPool = feeNum * maxParticipants;
+      const prizePoolCalc = totalPool * 0.50;
+      setPrizePool(`$${Math.round(prizePoolCalc).toLocaleString('es-CO')} COP`);
+    }
+  }, [entryFee, maxParticipants]);
 
   const handleGameChange = (selectedGame: string) => {
     setGame(selectedGame);
@@ -151,7 +160,7 @@ export function AdminScreen() {
     setGame("FreeFire");
     setMode(GAME_MODES["FreeFire"][0].mode);
     setSeriesType("Bo3");
-    setPrizePool("$500 USD");
+    setPrizePool("");
     setEntryFee("Gratis");
     setMaxParticipants(16);
     setStartDate("15 Sep 2026");
@@ -1145,7 +1154,8 @@ export function AdminScreen() {
                     value={prizePool}
                     onChange={(e) => setPrizePool(e.target.value)}
                     placeholder="Ej: $500 USD"
-                    className="w-full bg-[#18181B] border border-[#27272A] rounded-lg px-3 py-2 text-sm text-[#FAFAFA] focus:outline-none focus:border-[#D4860A]"
+                    disabled={parseInt(String(entryFee).replace(/\D/g, '')) > 0}
+                    className="w-full bg-[#18181B] border border-[#27272A] rounded-lg px-3 py-2 text-sm text-[#FAFAFA] focus:outline-none focus:border-[#D4860A] disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                 </div>
 
