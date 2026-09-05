@@ -182,3 +182,17 @@ export interface RefereeAccount {
   };
 }
 
+export interface PaymentReceipt {
+  reference: string;
+  gateway: "WOMPI";
+  amountFormatted: string;
+  amountInCents: number;
+  currency: string;
+  paymentMethodType: string;
+  status: "APPROVED" | "PENDING" | "DECLINED";
+  tournamentTitle: string;
+  customerName: string;
+  paidAt: string;
+  registrationId?: string;
+}
+

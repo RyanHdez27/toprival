@@ -20,7 +20,7 @@ type Screen =
   | "confirmation";
 
 export function ConfirmationScreen({ onNavigate }: { onNavigate: (s: Screen) => void }) {
-  const { selectedTournament, myTeam } = useApp();
+  const { selectedTournament, myTeam, lastPaymentReceipt } = useApp();
 
   return (
     <div className="min-h-screen bg-[#09090B] flex items-center justify-center px-4 py-8">
@@ -33,15 +33,46 @@ export function ConfirmationScreen({ onNavigate }: { onNavigate: (s: Screen) => 
         </div>
 
         <Badge variant="success" className="mb-4">
-          Inscripción Confirmada
+          {lastPaymentReceipt ? "Pago Aprobado e Inscripción Confirmada" : "Inscripción Confirmada"}
         </Badge>
 
         <h1 className="text-2xl font-bold text-[#FAFAFA] mb-2">
           ¡Estás inscrito!
         </h1>
-        <p className="text-[#A1A1AA] text-sm leading-relaxed mb-8">
+        <p className="text-[#A1A1AA] text-sm leading-relaxed mb-6">
           Tu equipo <strong className="text-[#FAFAFA]">{myTeam.name}</strong> ha quedado oficialmente registrado en <strong className="text-[#FAFAFA]">{selectedTournament.title}</strong>.
         </p>
+
+        {/* Recibo Oficial de Wompi */}
+        {lastPaymentReceipt && (
+          <Card className="p-4 text-left mb-6 border-[#D4860A]/40 bg-[#18181B] space-y-2.5">
+            <div className="flex justify-between items-center border-b border-[#27272A] pb-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm">💳</span>
+                <span className="text-xs font-bold text-[#FAFAFA]">Comprobante Wompi Bancolombia</span>
+              </div>
+              <Badge variant="success" className="text-[10px]">Aprobado</Badge>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <span className="text-[#71717A] block text-[10px]">Referencia:</span>
+                <span className="font-mono text-[#FAFAFA] text-[11px] truncate block">{lastPaymentReceipt.reference}</span>
+              </div>
+              <div>
+                <span className="text-[#71717A] block text-[10px]">Método:</span>
+                <span className="font-semibold text-[#FAFAFA]">{lastPaymentReceipt.paymentMethodType}</span>
+              </div>
+              <div>
+                <span className="text-[#71717A] block text-[10px]">Monto Pagado:</span>
+                <span className="font-bold text-[#D4860A]">{lastPaymentReceipt.amountFormatted}</span>
+              </div>
+              <div>
+                <span className="text-[#71717A] block text-[10px]">Fecha:</span>
+                <span className="text-[#A1A1AA] text-[11px]">{lastPaymentReceipt.paidAt}</span>
+              </div>
+            </div>
+          </Card>
+        )}
 
         <Card className="p-5 text-left mb-6">
           <h3 className="font-semibold text-[#FAFAFA] mb-3 text-sm">Resumen de Registro</h3>

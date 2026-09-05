@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import { Button, Badge, Card, Input, Select, Icon, Divider } from "../components/ui";
+import { api } from "../services/api";
 
 type Screen =
   | "home"
@@ -20,19 +21,154 @@ type Screen =
   | "registration"
   | "confirmation";
 
+type PaymentMethodType = "NEQUI" | "BANCOLOMBIA" | "PSE" | "CARD";
+
 export function RegistrationScreen({ onNavigate }: { onNavigate: (s: Screen) => void }) {
-  const { selectedTournament, myTeam, currentUser, registerCurrentTeamToTournament, isAuthenticated } = useApp();
+  const {
+    selectedTournament,
+    myTeam,
+    currentUser,
+    registerCurrentTeamToTournament,
+    isAuthenticated,
+    setLastPaymentReceipt,
+    showAlert
+  } = useApp();
   const [step, setStep] = useState(1);
   const [mode, setMode] = useState<"solo" | "team">("team");
   const [nick, setNick] = useState(currentUser?.nickname || "GamerNick");
   const [discord, setDiscord] = useState(currentUser?.discordTag || "Nick#1337");
 
+  // Estado del flujo de pago Wompi
+  const [selectedMethod, setSelectedMethod] = useState<PaymentMethodType>("NEQUI");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [currentIntent, setCurrentIntent] = useState<any>(null);
+
+  const isPaidTournament = Boolean(
+    selectedTournament.entryFee &&
+      !["gratis", "free", "$0", "0"].includes(selectedTournament.entryFee.toLowerCase().trim())
+  );
+
+  // Inyectar script de Wompi Widget en segundo plano
+  useEffect(() => {
+    if (typeof window !== "undefined" && !(window as any).WidgetCheckout) {
+      const script = document.createElement("script");
+      script.src = "https://checkout.wompi.co/widget.js";
+      script.async = true;
+      document.body.appendChild(script);
+    }
+  }, []);
+
+  const handleInitiatePayment = async () => {
+    setIsProcessing(true);
+    try {
+      const teamIdToRegister = mode === "team" ? myTeam.id : undefined;
+      const intent = await api.payments.createIntent(selectedTournament.id, {
+        teamId: teamIdToRegister,
+        nick,
+        discord,
+      });
+
+      if (intent.isFree) {
+        await registerCurrentTeamToTournament(selectedTournament.id);
+        setLastPaymentReceipt(null);
+        onNavigate("confirmation");
+        return;
+      }
+
+      setCurrentIntent(intent);
+
+      // Intentar abrir Widget oficial de Wompi si está disponible
+      if ((window as any).WidgetCheckout && intent.publicKey && intent.signature) {
+        try {
+          const checkout = new (window as any).WidgetCheckout({
+            currency: intent.currency || "COP",
+            amountInCents: intent.amountInCents,
+            reference: intent.reference,
+            publicKey: intent.publicKey,
+            signature: { integrity: intent.signature },
+            redirectUrl: window.location.origin + "/#/confirmation",
+          });
+
+          checkout.open(async function (result: any) {
+            const tx = result?.transaction;
+            if (tx && tx.status === "APPROVED") {
+              await registerCurrentTeamToTournament(selectedTournament.id);
+              setLastPaymentReceipt({
+                reference: tx.reference || intent.reference || "WOMPI-TR",
+                gateway: "WOMPI",
+                amountFormatted: intent.amountFormatted || selectedTournament.entryFee || "$15.000 COP",
+                amountInCents: intent.amountInCents || 1500000,
+                currency: "COP",
+                paymentMethodType: tx.payment_method_type || selectedMethod,
+                status: "APPROVED",
+                tournamentTitle: selectedTournament.title,
+                customerName: nick,
+                paidAt: new Date().toLocaleString("es-CO"),
+                registrationId: tx.id || "reg-wompi",
+              });
+              onNavigate("confirmation");
+            } else if (tx && tx.status === "DECLINED") {
+              showAlert("Transacción Declinada", "El pago no fue aprobado por el banco. Por favor intenta con otro método.", "warning");
+            }
+          });
+          setIsProcessing(false);
+          return;
+        } catch (widgetErr) {
+          console.warn("Wompi Widget fallback modal:", widgetErr);
+        }
+      }
+
+      // Si el widget no cargó o está en entorno sandbox interactivo, abrir pasarela modal
+      setPaymentModalOpen(true);
+    } catch (err: any) {
+      showAlert("Error al iniciar pago", err.message || "No se pudo conectar con Wompi", "danger");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleSimulatePaymentApproval = async () => {
+    if (!currentIntent?.reference) return;
+    setIsProcessing(true);
+    try {
+      const res = await api.payments.simulateSandboxApproval(currentIntent.reference, selectedMethod);
+      if (res.success) {
+        await registerCurrentTeamToTournament(selectedTournament.id);
+        setLastPaymentReceipt({
+          reference: currentIntent.reference,
+          gateway: "WOMPI",
+          amountFormatted: currentIntent.amountFormatted || selectedTournament.entryFee || "$15.000 COP",
+          amountInCents: currentIntent.amountInCents || 1500000,
+          currency: "COP",
+          paymentMethodType: selectedMethod,
+          status: "APPROVED",
+          tournamentTitle: selectedTournament.title,
+          customerName: nick,
+          paidAt: new Date().toLocaleString("es-CO"),
+          registrationId: res.registrationId || "reg-wompi-sim",
+        });
+        setPaymentModalOpen(false);
+        onNavigate("confirmation");
+      }
+    } catch (err: any) {
+      showAlert("Error en Sandbox", err.message || "No se pudo procesar la transacción", "danger");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleSubmit = () => {
     if (step < 3) {
       setStep(step + 1);
     } else {
-      registerCurrentTeamToTournament(selectedTournament.id);
-      onNavigate("confirmation");
+      if (isPaidTournament) {
+        handleInitiatePayment();
+      } else {
+        registerCurrentTeamToTournament(selectedTournament.id);
+        setLastPaymentReceipt(null);
+        onNavigate("confirmation");
+      }
     }
   };
 
@@ -194,9 +330,18 @@ export function RegistrationScreen({ onNavigate }: { onNavigate: (s: Screen) => 
         )}
 
         {step === 3 && (
-          <div>
-            <h2 className="text-xl font-bold text-[#FAFAFA] mb-2">Confirmar inscripción</h2>
-            <p className="text-[#71717A] text-sm mb-6">Revisa los datos antes de confirmar.</p>
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-xl font-bold text-[#FAFAFA] mb-1">
+                {isPaidTournament ? "Pago e Inscripción Oficial" : "Confirmar inscripción"}
+              </h2>
+              <p className="text-[#71717A] text-sm mb-4">
+                {isPaidTournament
+                  ? "Asegura tu cupo en el torneo a través de la pasarela oficial Wompi Bancolombia."
+                  : "Revisa los datos antes de confirmar tu cupo."}
+              </p>
+            </div>
+
             <Card className="p-5 space-y-3">
               {[
                 { label: "Torneo", value: selectedTournament.title },
@@ -213,24 +358,160 @@ export function RegistrationScreen({ onNavigate }: { onNavigate: (s: Screen) => 
                 </div>
               ))}
               <Divider />
-              <div className="flex justify-between text-sm">
-                <span className="text-[#71717A]">Estado de solicitud</span>
-                <Badge variant="success">Confirmación Inmediata</Badge>
+              <div className="flex justify-between text-sm items-center">
+                <span className="text-[#71717A]">Estado de cupo</span>
+                {isPaidTournament ? (
+                  <Badge variant="live">Pendiente de Pago</Badge>
+                ) : (
+                  <Badge variant="success">Cupo Inmediato Gratuito</Badge>
+                )}
               </div>
             </Card>
+
+            {/* Bloque Wompi si el torneo es de pago */}
+            {isPaidTournament && (
+              <div className="space-y-4">
+                <div className="p-4 rounded-xl border border-[#D4860A]/30 bg-[#D4860A]/5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">💳</span>
+                      <div>
+                        <h4 className="text-sm font-bold text-[#FAFAFA]">Pasarela Oficial — Wompi Bancolombia</h4>
+                        <p className="text-[11px] text-[#71717A]">Pagos 100% seguros y encriptados en pesos colombianos</p>
+                      </div>
+                    </div>
+                    <Badge variant="primary" className="text-[10px]">Verificado</Badge>
+                  </div>
+
+                  <div className="pt-2 border-t border-[#27272A] grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[
+                      { id: "NEQUI", label: "Nequi", icon: "📱", desc: "Push instantáneo" },
+                      { id: "BANCOLOMBIA", label: "Bancolombia", icon: "🟡", desc: "Transferencia / QR" },
+                      { id: "PSE", label: "PSE", icon: "🏛️", desc: "Cualquier banco" },
+                      { id: "CARD", label: "Tarjetas", icon: "💳", desc: "Débito / Crédito" },
+                    ].map((m) => (
+                      <div
+                        key={m.id}
+                        onClick={() => setSelectedMethod(m.id as PaymentMethodType)}
+                        className={`p-2.5 rounded-lg border text-left cursor-pointer transition-all ${
+                          selectedMethod === m.id
+                            ? "border-[#D4860A] bg-[#D4860A]/15 text-[#FAFAFA]"
+                            : "border-[#27272A] bg-[#18181B] text-[#A1A1AA] hover:border-[#3F3F46]"
+                        }`}
+                      >
+                        <div className="text-base mb-1">{m.icon}</div>
+                        <div className="text-xs font-bold">{m.label}</div>
+                        <div className="text-[10px] text-[#71717A] truncate">{m.desc}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs text-[#A1A1AA] pt-1">
+                    <span>Total liquidado:</span>
+                    <span className="text-base font-extrabold text-[#D4860A]">
+                      {selectedTournament.entryFee}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-lg border border-[#22C55E]/20 bg-[#22C55E]/5 text-xs text-[#A1A1AA] flex items-center gap-2">
+                  <span className="text-[#22C55E] text-sm shrink-0">🛡️</span>
+                  <span>Sin comisiones bancarias adicionales para el jugador. Cupo reservado automáticamente vía webhook tras el pago.</span>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         <div className="flex gap-3 mt-8">
           {step > 1 && (
-            <Button variant="outline" onClick={() => setStep(step - 1)}>
+            <Button variant="outline" onClick={() => setStep(step - 1)} disabled={isProcessing}>
               Anterior
             </Button>
           )}
-          <Button fullWidth onClick={handleSubmit}>
-            {step < 3 ? "Continuar" : "Confirmar Inscripción"}
+          <Button fullWidth onClick={handleSubmit} disabled={isProcessing} className="justify-center font-bold">
+            {isProcessing ? (
+              <span className="flex items-center gap-2">
+                <span className="animate-spin text-sm">⏳</span> Conectando con Wompi...
+              </span>
+            ) : step < 3 ? (
+              "Continuar"
+            ) : isPaidTournament ? (
+              `Pagar ${selectedTournament.entryFee} con Wompi`
+            ) : (
+              "Confirmar Inscripción Gratuita"
+            )}
           </Button>
         </div>
+
+        {/* Modal interactivo de Wompi Sandbox */}
+        {paymentModalOpen && currentIntent && (
+          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+            <Card className="max-w-md w-full p-6 border-[#D4860A]/50 bg-[#111113] space-y-4 animate-in fade-in zoom-in-95">
+              <div className="flex justify-between items-start border-b border-[#27272A] pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-lg bg-[#D4860A]/20 flex items-center justify-center text-lg">
+                    💳
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-[#FAFAFA]">Checkout Wompi</h3>
+                    <p className="text-xs text-[#71717A]">Transacción Segura Bancolombia</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setPaymentModalOpen(false)}
+                  className="text-[#71717A] hover:text-[#FAFAFA] text-lg font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-2 text-xs bg-[#18181B] p-3 rounded-lg border border-[#27272A]">
+                <div className="flex justify-between">
+                  <span className="text-[#71717A]">Torneo:</span>
+                  <span className="font-semibold text-[#FAFAFA]">{currentIntent.tournament?.title}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#71717A]">Monto a Cobrar:</span>
+                  <span className="font-bold text-[#D4860A] text-sm">{currentIntent.amountFormatted}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#71717A]">Referencia Wompi:</span>
+                  <span className="font-mono text-[10px] text-[#A1A1AA]">{currentIntent.reference}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#71717A]">Método Seleccionado:</span>
+                  <Badge variant="primary" className="text-[10px]">{selectedMethod}</Badge>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-lg border border-[#3B82F6]/30 bg-[#3B82F6]/10 text-xs text-[#93C5FD]">
+                🧪 <strong>Entorno Sandbox Activo:</strong> Puedes simular la aprobación inmediata de este pago con {selectedMethod} para validar la reserva y asignación de cupo en la base de datos de producción.
+              </div>
+
+              <div className="flex flex-col gap-2 pt-2">
+                <Button
+                  fullWidth
+                  variant="primary"
+                  onClick={handleSimulatePaymentApproval}
+                  disabled={isProcessing}
+                  className="justify-center font-bold"
+                >
+                  {isProcessing ? "Validando en Wompi..." : `Simular Pago Aprobado (${selectedMethod})`}
+                </Button>
+                <Button
+                  fullWidth
+                  variant="outline"
+                  onClick={() => setPaymentModalOpen(false)}
+                  disabled={isProcessing}
+                  className="justify-center"
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
   );

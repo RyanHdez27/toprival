@@ -10,6 +10,7 @@ import {
   SystemLog,
   SystemNotification,
   RefereeAccount,
+  PaymentReceipt,
 } from "../types";
 import { api } from "../services/api";
 import { ModalConfig, ModalDialog } from "../components/ModalDialog";
@@ -127,6 +128,8 @@ interface AppContextType {
   showAlert: (title: string, message: string, variant?: "info" | "success" | "warning" | "danger") => Promise<void>;
   showConfirm: (title: string, message: string, confirmText?: string, cancelText?: string, variant?: "warning" | "danger" | "info") => Promise<boolean>;
   showPrompt: (title: string, message: string, defaultValue?: string, placeholder?: string) => Promise<string | null>;
+  lastPaymentReceipt: PaymentReceipt | null;
+  setLastPaymentReceipt: (receipt: PaymentReceipt | null) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -145,6 +148,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [systemLogs, setSystemLogs] = useState<SystemLog[]>(INITIAL_LOGS);
   const [systemNotifications, setSystemNotifications] = useState<SystemNotification[]>(INITIAL_NOTIFICATIONS);
   const [referees, setReferees] = useState<RefereeAccount[]>(INITIAL_REFEREES);
+  const [lastPaymentReceipt, setLastPaymentReceipt] = useState<PaymentReceipt | null>(null);
   const [modalConfig, setModalConfig] = useState<ModalConfig | null>(null);
 
   const showAlert = (
@@ -1129,6 +1133,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         showAlert,
         showConfirm,
         showPrompt,
+        lastPaymentReceipt,
+        setLastPaymentReceipt,
       }}
     >
       {children}

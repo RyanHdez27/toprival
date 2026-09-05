@@ -9,10 +9,16 @@ const fs = require('fs');
 const cron = require('node-cron');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'toprival_jwt_secret_dev_key_2026';
+
+// 💳 Pasarela Wompi (Bancolombia) - Configuración Sandbox / Producción
+const WOMPI_PUBLIC_KEY = process.env.WOMPI_PUBLIC_KEY || 'pub_test_Q5yDA9xoKdePzhSGeVe9KvxXQKIO5Am0';
+const WOMPI_INTEGRITY_SECRET = process.env.WOMPI_INTEGRITY_SECRET || 'test_integrity_4D242e882a61c2';
+const WOMPI_EVENTS_SECRET = process.env.WOMPI_EVENTS_SECRET || 'test_events_4D242e882a61c2';
 
 // Directorio para evidencias
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -472,13 +478,251 @@ app.post('/api/tournaments/:id/register', authenticateToken, async (req, res) =>
   }
 });
 
-// Crear torneo oficial (Admin)
-app.post('/api/admin/tournaments', authenticateToken, requireAdmin, async (req, res) => {
-  const { title, game, mode, prizePool, maxParticipants, minParticipants, startDate, startTime, bannerImage, rulesText } = req.body;
+// --- 💳 PASARELA DE PAGOS WOMPI (BANCOLOMBIA / NEQUI / PSE / TARJETAS) ---
+
+function parseEntryFeeToCents(feeStr) {
+  if (!feeStr || typeof feeStr !== 'string') return 0;
+  const clean = feeStr.toLowerCase().trim();
+  if (clean === 'gratis' || clean === 'free' || clean === '$0' || clean === '0') return 0;
+  const digits = clean.replace(/[^0-9]/g, '');
+  if (!digits) return 0;
+  const pesos = parseInt(digits, 10);
+  return pesos * 100; // Centavos
+}
+
+function generateWompiIntegritySignature(reference, amountInCents, currency, secret) {
+  const chain = `${reference}${amountInCents}${currency}${secret}`;
+  return crypto.createHash('sha256').update(chain).digest('hex');
+}
+
+// 1. Iniciar Intención de Pago para Torneo (CU-04 con Wompi)
+app.post('/api/tournaments/:id/payment-intent', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { teamId, nick, discord } = req.body;
+  const userId = req.user.id;
+
+  try {
+    // Verificar si el torneo existe
+    const tourneyRes = await pool.query('SELECT * FROM tournaments WHERE id = $1', [id]);
+    if (tourneyRes.rows.length === 0) {
+      return res.status(404).json({ message: 'Torneo no encontrado' });
+    }
+    const tournament = tourneyRes.rows[0];
+
+    // Verificar si ya está registrado
+    const checkReg = await pool.query(
+      'SELECT * FROM tournament_registrations WHERE tournament_id = $1 AND (user_id = $2 OR (team_id IS NOT NULL AND team_id = $3))',
+      [id, userId, teamId || null]
+    );
+    if (checkReg.rows.length > 0) {
+      return res.status(400).json({ message: 'Ya estás registrado en este torneo' });
+    }
+
+    const amountInCents = parseEntryFeeToCents(tournament.entry_fee);
+
+    // Si es gratuito, no requiere pasarela de pago
+    if (amountInCents <= 0) {
+      return res.json({
+        isFree: true,
+        message: 'El torneo es gratuito. Procede con el registro directo.'
+      });
+    }
+
+    // Generar referencia única de transacción para Wompi
+    const reference = `TOPRIVAL-${id.substring(0, 8)}-${userId.substring(0, 8)}-${Date.now()}`;
+    const currency = 'COP';
+    const signature = generateWompiIntegritySignature(reference, amountInCents, currency, WOMPI_INTEGRITY_SECRET);
+
+    // Registrar intención de pago en tournament_payments
+    await pool.query(
+      `INSERT INTO tournament_payments 
+       (tournament_id, user_id, team_id, gateway, transaction_reference, amount_in_cents, currency, status, customer_email, customer_nickname)
+       VALUES ($1, $2, $3, 'WOMPI', $4, $5, $6, 'PENDING', $7, $8)`,
+      [id, userId, teamId || null, reference, amountInCents, currency, req.user.email, req.user.nickname || nick || 'Gamer']
+    );
+
+    await logSystemEvent(
+      'PAYMENT',
+      'Intención de Pago Wompi Generada',
+      req.user.nickname || 'Jugador',
+      `Referencia: ${reference} · Monto: $${amountInCents / 100} COP para ${tournament.title}`,
+      'INFO'
+    );
+
+    res.json({
+      isFree: false,
+      reference,
+      amountInCents,
+      amountFormatted: `$${(amountInCents / 100).toLocaleString('es-CO')} COP`,
+      currency,
+      publicKey: WOMPI_PUBLIC_KEY,
+      signature,
+      tournament: {
+        id: tournament.id,
+        title: tournament.title,
+        game: tournament.game,
+        entryFee: tournament.entry_fee
+      },
+      customer: {
+        email: req.user.email,
+        fullName: req.user.nickname || nick || 'Gamer TopRival'
+      }
+    });
+  } catch (err) {
+    console.error('Error generando intención de pago Wompi:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 2. Webhook Oficial de Wompi (Confirmación Automática 24/7)
+app.post('/api/webhooks/wompi', async (req, res) => {
+  try {
+    const { event, data } = req.body;
+    console.log(`[Wompi Webhook] Evento recibido: ${event}`);
+
+    if (event === 'transaction.updated' && data && data.transaction) {
+      const tx = data.transaction;
+      const { reference, status, id: gatewayId, payment_method_type, amount_in_cents } = tx;
+
+      console.log(`[Wompi Webhook] Transacción ${reference} -> Estado: ${status}`);
+
+      // Buscar pago asociado
+      const paymentRes = await pool.query(
+        'SELECT * FROM tournament_payments WHERE transaction_reference = $1',
+        [reference]
+      );
+
+      if (paymentRes.rows.length > 0) {
+        const payment = paymentRes.rows[0];
+
+        // Actualizar registro de pago
+        await pool.query(
+          `UPDATE tournament_payments 
+           SET status = $1, gateway_transaction_id = $2, payment_method_type = $3, updated_at = NOW()
+           WHERE transaction_reference = $4`,
+          [status, gatewayId, payment_method_type, reference]
+        );
+
+        // Si fue aprobado, inscribir automáticamente en el torneo
+        if (status === 'APPROVED') {
+          await pool.query(
+            `INSERT INTO tournament_registrations (tournament_id, team_id, user_id, status)
+             VALUES ($1, $2, $3, 'CONFIRMED')
+             ON CONFLICT DO NOTHING`,
+            [payment.tournament_id, payment.team_id, payment.user_id]
+          );
+
+          await logSystemEvent(
+            'PAYMENT',
+            'Pago Wompi Aprobado',
+            payment.customer_nickname || 'Jugador',
+            `Pago aprobado por $${amount_in_cents / 100} COP (${payment_method_type}). Cupo asegurado en torneo.`,
+            'SUCCESS'
+          );
+
+          // Crear notificación de sistema para el usuario
+          await pool.query(
+            `INSERT INTO system_notifications (user_id, title, message, type, link_screen)
+             VALUES ($1, 'Pago Confirmado 🎉', $2, 'TOURNAMENT', 'dashboard')`,
+            [
+              payment.user_id,
+              `Tu pago de $${(amount_in_cents / 100).toLocaleString('es-CO')} COP fue aprobado exitosamente. ¡Tu cupo está confirmado!`
+            ]
+          );
+        }
+      }
+    }
+
+    res.status(200).json({ received: true });
+  } catch (err) {
+    console.error('Error procesando webhook de Wompi:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 3. Consultar Estado de Pago por Referencia
+app.get('/api/payments/:reference/status', authenticateToken, async (req, res) => {
+  const { reference } = req.params;
   try {
     const result = await pool.query(
-      `INSERT INTO tournaments (title, game, mode, prize_pool, max_participants, min_participants, start_date, start_time, banner_image, rules_text, status, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'REGISTRATION_OPEN', $11) RETURNING *`,
+      `SELECT p.*, t.title as tournament_title, t.game, r.id as registration_id
+       FROM tournament_payments p
+       LEFT JOIN tournaments t ON p.tournament_id = t.id
+       LEFT JOIN tournament_registrations r ON (p.tournament_id = r.tournament_id AND p.user_id = r.user_id)
+       WHERE p.transaction_reference = $1`,
+      [reference]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Transacción no encontrada' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 4. Simulador / Aprobación en Sandbox (Para pruebas inmediatas sin gastar dinero real)
+app.post('/api/payments/:reference/simulate-sandbox-approval', authenticateToken, async (req, res) => {
+  const { reference } = req.params;
+  const { paymentMethod = 'NEQUI' } = req.body;
+
+  try {
+    const paymentRes = await pool.query(
+      'SELECT * FROM tournament_payments WHERE transaction_reference = $1',
+      [reference]
+    );
+
+    if (paymentRes.rows.length === 0) {
+      return res.status(404).json({ message: 'Pago no encontrado' });
+    }
+
+    const payment = paymentRes.rows[0];
+    const simulatedGatewayId = `SIM-${Date.now()}`;
+
+    await pool.query(
+      `UPDATE tournament_payments 
+       SET status = 'APPROVED', gateway_transaction_id = $1, payment_method_type = $2, updated_at = NOW()
+       WHERE transaction_reference = $3`,
+      [simulatedGatewayId, paymentMethod, reference]
+    );
+
+    const regRes = await pool.query(
+      `INSERT INTO tournament_registrations (tournament_id, team_id, user_id, status)
+       VALUES ($1, $2, $3, 'CONFIRMED')
+       ON CONFLICT DO NOTHING
+       RETURNING id`,
+      [payment.tournament_id, payment.team_id, payment.user_id]
+    );
+
+    await logSystemEvent(
+      'PAYMENT',
+      'Pago Simulado Sandbox Aprobado',
+      req.user.nickname || 'Jugador',
+      `Pago aprobado vía ${paymentMethod}. Referencia: ${reference}`,
+      'SUCCESS'
+    );
+
+    res.json({
+      success: true,
+      status: 'APPROVED',
+      reference,
+      registrationId: regRes.rows[0]?.id || 'confirmed',
+      message: 'Pago aprobado exitosamente en entorno Sandbox'
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Crear torneo oficial (Admin)
+app.post('/api/admin/tournaments', authenticateToken, requireAdmin, async (req, res) => {
+  const { title, game, mode, prizePool, maxParticipants, minParticipants, startDate, startTime, bannerImage, rulesText, entryFee } = req.body;
+  try {
+    const result = await pool.query(
+      `INSERT INTO tournaments (title, game, mode, prize_pool, max_participants, min_participants, start_date, start_time, banner_image, rules_text, status, entry_fee, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'REGISTRATION_OPEN', $11, $12) RETURNING *`,
       [
         title,
         game,
@@ -490,6 +734,7 @@ app.post('/api/admin/tournaments', authenticateToken, requireAdmin, async (req, 
         startTime || '20:00 COT',
         bannerImage || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800&fit=crop&auto=format',
         rulesText || 'Reglamento estándar TopRival. Tolerancia de 15 minutos.',
+        entryFee || 'Gratis',
         req.user.id
       ]
     );

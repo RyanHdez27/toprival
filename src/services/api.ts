@@ -202,6 +202,48 @@ class ApiClient {
       });
     },
   };
+
+  // --- Pagos y Pasarela Wompi ---
+  payments = {
+    createIntent: (tournamentId: string, data: { teamId?: string; nick?: string; discord?: string }) =>
+      this.request<{
+        isFree: boolean;
+        reference?: string;
+        amountInCents?: number;
+        amountFormatted?: string;
+        currency?: string;
+        publicKey?: string;
+        signature?: string;
+        tournament?: { id: string; title: string; game: string; entryFee: string };
+        customer?: { email: string; fullName: string };
+        message?: string;
+      }>('/tournaments/' + tournamentId + '/payment-intent', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    getStatus: (reference: string) =>
+      this.request<{
+        id: string;
+        transaction_reference: string;
+        status: string;
+        amount_in_cents: number;
+        currency: string;
+        payment_method_type?: string;
+        tournament_title?: string;
+        registration_id?: string;
+      }>('/payments/' + reference + '/status'),
+    simulateSandboxApproval: (reference: string, paymentMethod: string = 'NEQUI') =>
+      this.request<{
+        success: boolean;
+        status: string;
+        reference: string;
+        registrationId: string;
+        message: string;
+      }>('/payments/' + reference + '/simulate-sandbox-approval', {
+        method: 'POST',
+        body: JSON.stringify({ paymentMethod }),
+      }),
+  };
 }
 
 export const api = new ApiClient();

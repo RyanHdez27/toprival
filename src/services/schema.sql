@@ -110,6 +110,27 @@ CREATE TABLE IF NOT EXISTS tournament_registrations (
     registered_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- 5.1 Pagos de Inscripciones con Pasarelas (Wompi, etc.)
+CREATE TABLE IF NOT EXISTS tournament_payments (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tournament_id UUID REFERENCES tournaments(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    team_id UUID REFERENCES teams(id) ON DELETE SET NULL,
+    gateway VARCHAR(50) DEFAULT 'WOMPI',
+    transaction_reference VARCHAR(255) UNIQUE NOT NULL,
+    gateway_transaction_id VARCHAR(255),
+    amount_in_cents BIGINT NOT NULL,
+    currency VARCHAR(10) DEFAULT 'COP',
+    fee_in_cents BIGINT DEFAULT 0,
+    net_amount_in_cents BIGINT DEFAULT 0,
+    payment_method_type VARCHAR(50), -- NEQUI, CARD, PSE, BANCOLOMBIA
+    status VARCHAR(50) DEFAULT 'PENDING', -- PENDING, APPROVED, DECLINED, VOIDED, ERROR
+    customer_email VARCHAR(255),
+    customer_nickname VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- 6. Partidos y Brackets (CU-05, CU-06, CU-07, CU-12)
 CREATE TABLE IF NOT EXISTS tournament_matches (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
