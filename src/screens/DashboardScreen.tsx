@@ -580,16 +580,22 @@ export function DashboardScreen({ onNavigate }: { onNavigate: (s: Screen) => voi
                 </Button>
               </div>
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl bg-[#18181B] border border-[#27272A] flex items-center justify-center font-bold text-sm text-[#D4860A]">
-                  {myTeam?.tag || "KC"}
+                <div className={`w-10 h-10 rounded-xl bg-[#18181B] border flex items-center justify-center font-bold text-sm ${myTeam && myTeam.id !== "clan-solo" && myTeam.tag !== "SOLO" ? "border-[#D4860A] text-[#D4860A]" : "border-[#71717A] text-[#71717A]"}`}>
+                  {myTeam && myTeam.id !== "clan-solo" && myTeam.tag !== "SOLO" ? myTeam.tag : "🐺"}
                 </div>
                 <div>
-                  <div className="font-bold text-sm text-[#FAFAFA]">{myTeam?.name || "Karmine Corp LATAM"}</div>
-                  <div className="text-[11px] text-[#71717A]">{myTeam?.members?.length || 4} miembros activos</div>
+                  <div className="font-bold text-sm text-[#FAFAFA]">
+                    {myTeam && myTeam.id !== "clan-solo" && myTeam.tag !== "SOLO" ? myTeam.name : "Lobo Solitario"}
+                  </div>
+                  <div className="text-[11px] text-[#71717A]">
+                    {myTeam && myTeam.id !== "clan-solo" && myTeam.tag !== "SOLO"
+                      ? `${myTeam?.members?.length || 1} miembros activos`
+                      : "Agente Libre (Sin Clan)"}
+                  </div>
                 </div>
               </div>
               <div className="text-[11px] text-[#A1A1AA] bg-[#18181B] p-2.5 rounded-lg border border-[#27272A]">
-                Capitán: <strong className="text-[#FAFAFA]">{currentUser?.nickname}</strong>
+                Rol: <strong className="text-[#FAFAFA]">{currentRole === "TEAM_CAPTAIN" ? "Capitán del Clan" : "Jugador (Agente Libre)"}</strong>
               </div>
             </Card>
 

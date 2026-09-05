@@ -20,7 +20,12 @@ type Screen =
   | "confirmation";
 
 export function ConfirmationScreen({ onNavigate }: { onNavigate: (s: Screen) => void }) {
-  const { selectedTournament, myTeam, lastPaymentReceipt } = useApp();
+  const { selectedTournament, myTeam, lastPaymentReceipt, currentUser } = useApp();
+
+  const registeredName = myTeam?.name || currentUser?.nickname || "Participante";
+  const tourneyTitle = selectedTournament?.title || "Torneo Oficial TopRival";
+  const startDate = selectedTournament?.startDate || "Fecha por confirmar";
+  const startTime = selectedTournament?.startTime || "Horario oficial";
 
   return (
     <div className="min-h-screen bg-[#09090B] flex items-center justify-center px-4 py-8">
@@ -40,7 +45,7 @@ export function ConfirmationScreen({ onNavigate }: { onNavigate: (s: Screen) => 
           ¡Estás inscrito!
         </h1>
         <p className="text-[#A1A1AA] text-sm leading-relaxed mb-6">
-          Tu equipo <strong className="text-[#FAFAFA]">{myTeam.name}</strong> ha quedado oficialmente registrado en <strong className="text-[#FAFAFA]">{selectedTournament.title}</strong>.
+          <strong className="text-[#FAFAFA]">{registeredName}</strong> ha quedado oficialmente registrado en <strong className="text-[#FAFAFA]">{tourneyTitle}</strong>.
         </p>
 
         {/* Recibo Oficial de Wompi */}
@@ -78,13 +83,16 @@ export function ConfirmationScreen({ onNavigate }: { onNavigate: (s: Screen) => 
           <h3 className="font-semibold text-[#FAFAFA] mb-3 text-sm">Resumen de Registro</h3>
           <div className="space-y-2">
             {[
-              { icon: <Icon.Swords />, label: "Torneo", value: selectedTournament.title },
-              { icon: <Icon.Calendar />, label: "Fecha", value: `${selectedTournament.startDate} · ${selectedTournament.startTime}` },
-              { icon: <Icon.Users />, label: "Modalidad", value: `${selectedTournament.game} (${selectedTournament.mode})` },
+              { icon: <Icon.Swords />, label: "Torneo", value: tourneyTitle },
+              { icon: <Icon.Calendar />, label: "Fecha", value: `${startDate} · ${startTime}` },
+              { icon: <Icon.Users />, label: "Modalidad", value: `${selectedTournament?.game || "Competitivo"} (${selectedTournament?.mode || "General"})` },
+              ...(selectedTournament?.description
+                ? [{ icon: <Icon.Flag />, label: "Instrucciones", value: selectedTournament.description }]
+                : []),
             ].map((r) => (
-              <div key={r.label} className="flex items-center gap-2 text-sm text-[#A1A1AA]">
-                <span className="text-[#D4860A]">{r.icon}</span>
-                <span className="text-[#71717A]">{r.label}:</span>
+              <div key={r.label} className="flex items-start gap-2 text-sm text-[#A1A1AA]">
+                <span className="text-[#D4860A] mt-0.5">{r.icon}</span>
+                <span className="text-[#71717A] shrink-0">{r.label}:</span>
                 <span className="text-[#FAFAFA]">{r.value}</span>
               </div>
             ))}
@@ -100,10 +108,10 @@ export function ConfirmationScreen({ onNavigate }: { onNavigate: (s: Screen) => 
           <h3 className="font-semibold text-[#FAFAFA] mb-3 text-sm">Próximos pasos</h3>
           <div className="space-y-2">
             {[
-              "Recibirás confirmación por Discord",
-              "El bracket se publicará el 13 Sep a las 20:00",
-              "Los partidos comienzan el 14 Sep",
-              "Reporta tus resultados desde el Dashboard",
+              "Recibirás confirmación por la plataforma y Discord",
+              `El bracket oficial se publicará previo al inicio (${startDate})`,
+              `Los partidos comienzan según el horario fijado (${startTime})`,
+              "Reporta tus resultados desde el Dashboard o la vista del partido",
             ].map((step, i) => (
               <div key={i} className="flex items-start gap-2 text-sm text-[#A1A1AA]">
                 <span className="w-4 h-4 rounded-full bg-[#D4860A]/20 text-[#F5B830] text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">

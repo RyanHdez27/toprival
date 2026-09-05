@@ -11,6 +11,7 @@ import {
   SystemNotification,
   RefereeAccount,
   PaymentReceipt,
+  SquadModel,
 } from "../types";
 import { api } from "../services/api";
 import { ModalConfig, ModalDialog } from "../components/ModalDialog";
@@ -89,12 +90,19 @@ interface AppContextType {
   setSelectedTournamentId: (id: string) => void;
   updateTournamentStatus: (id: string, status: TournamentStatus) => void;
   myTeam: Team;
+  squads: SquadModel[];
+  addSquad: (squad: SquadModel) => void;
+  updateSquad: (squadId: string, updater: (sq: SquadModel) => SquadModel) => void;
+  removeSquad: (squadId: string) => void;
   tournamentRequests: TournamentRequest[];
   voteTournamentRequest: (requestId: string) => void;
   createTournamentRequest: (request: Omit<TournamentRequest, "id" | "currentVotes" | "hasVoted" | "status"> & { isAdminOfficial?: boolean }) => void;
   rejectTournamentRequest: (requestId: string) => void;
   deleteTournamentRequest: (requestId: string) => void;
-  registerCurrentTeamToTournament: (tournamentId: string) => Promise<boolean> | boolean;
+  registerCurrentTeamToTournament: (
+    tournamentId: string,
+    participantOverride?: { id: string; name: string }
+  ) => Promise<boolean> | boolean;
   createTournamentByAdmin: (tournament: Partial<TournamentModel>) => void;
   updateTournamentByAdmin: (id: string, updates: Partial<TournamentModel>) => void;
   deleteTournamentByAdmin: (id: string) => void;
@@ -146,9 +154,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [currentRole, setCurrentRole] = useState<Role>(() => {
     try {
       const saved = localStorage.getItem("toprival_user");
-      return saved ? JSON.parse(saved).role : "TEAM_CAPTAIN";
+      return saved ? JSON.parse(saved).role : "PLAYER";
     } catch {
-      return "TEAM_CAPTAIN";
+      return "PLAYER";
     }
   });
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -157,6 +165,45 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [tournaments, setTournaments] = useState<TournamentModel[]>(INITIAL_TOURNAMENTS);
   const [selectedTournamentId, setSelectedTournamentId] = useState<string>("ff-live-01");
   const [myTeam, setMyTeam] = useState<Team>(INITIAL_TEAM);
+  const [squads, setSquads] = useState<SquadModel[]>(() => {
+    try {
+      const saved = localStorage.getItem("toprival_squads");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const addSquad = (newSq: SquadModel) => {
+    setSquads((prev) => {
+      const updated = [newSq, ...prev];
+      try {
+        localStorage.setItem("toprival_squads", JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  };
+
+  const updateSquad = (squadId: string, updater: (sq: SquadModel) => SquadModel) => {
+    setSquads((prev) => {
+      const updated = prev.map((sq) => (sq.id === squadId ? updater(sq) : sq));
+      try {
+        localStorage.setItem("toprival_squads", JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  };
+
+  const removeSquad = (squadId: string) => {
+    setSquads((prev) => {
+      const updated = prev.filter((sq) => sq.id !== squadId);
+      try {
+        localStorage.setItem("toprival_squads", JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  };
+
   const [tournamentRequests, setTournamentRequests] = useState<TournamentRequest[]>(INITIAL_REQUESTS);
   const [bracketData, setBracketData] = useState<BracketRound[]>(INITIAL_BRACKET);
   const [systemLogs, setSystemLogs] = useState<SystemLog[]>(INITIAL_LOGS);
@@ -643,16 +690,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setTournamentRequests((prev) => prev.filter((r) => r.id !== requestId));
   };
 
-  const registerCurrentTeamToTournament = async (tournamentId: string) => {
+  const registerCurrentTeamToTournament = async (
+    tournamentId: string,
+    participantOverride?: { id: string; name: string }
+  ) => {
     let success = false;
-    const registrantId = myTeam?.id || currentUser?.id || "player-me";
-    const registrantName = myTeam?.name || currentUser?.nickname || "Mi Escuadra";
+    const registrantId = participantOverride?.id || myTeam?.id || currentUser?.id || "player-me";
+    const registrantName = participantOverride?.name || myTeam?.name || currentUser?.nickname || "Mi Escuadra";
 
     setTournaments((prev) =>
       prev.map((t) => {
         if (t.id === tournamentId) {
           const already = t.registeredTeamsOrPlayers?.some(
-            (p) => p.id === registrantId || p.name === registrantName || p.id === currentUser?.id || p.name === currentUser?.nickname
+            (p) => p.id === registrantId || p.name === registrantName
           );
           if (already) return t;
           success = true;
@@ -693,6 +743,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       status: (newTourney.status as TournamentStatus) || "registration-open",
       format: newTourney.format || "SINGLE_ELIMINATION",
       mode: newTourney.mode || "5v5",
+      description: newTourney.description || "Torneo oficial competitivo organizado por TopRival.",
       isTeamBased: newTourney.isTeamBased ?? true,
       entryFee: newTourney.entryFee || "Gratis",
       prizePool: newTourney.prizePool || "",
@@ -1067,6 +1118,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ...teamData,
     };
     setMyTeam(newTeam);
+    // El usuario se convierte en TEAM_CAPTAIN al fundar o liderar un clan / escuadra
+    setCurrentRole("TEAM_CAPTAIN");
+    setCurrentUser((prev) => {
+      const updated = { ...prev, role: "TEAM_CAPTAIN" as Role };
+      try {
+        localStorage.setItem("toprival_user", JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
   };
 
   const leaveClan = (): boolean => {
@@ -1095,11 +1155,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         {
           userId: currentUser.id,
           nickname: currentUser.nickname,
-          role: "CAPTAIN",
+          role: "MEMBER",
           inGameName: currentUser.nickname,
           joinedAt: "Hoy",
         },
       ],
+    });
+
+    // Al dejar el clan, el usuario vuelve a tener rol de jugador y queda disponible como Agente Libre
+    setCurrentRole("PLAYER");
+    setCurrentUser((prev) => {
+      const updated = { ...prev, role: "PLAYER" as Role };
+      try {
+        localStorage.setItem("toprival_user", JSON.stringify(updated));
+      } catch {}
+      return updated;
     });
     return true;
   };
@@ -1120,6 +1190,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setSelectedTournamentId,
         updateTournamentStatus,
         myTeam,
+        squads,
+        addSquad,
+        updateSquad,
+        removeSquad,
         tournamentRequests,
         voteTournamentRequest,
         createTournamentRequest,

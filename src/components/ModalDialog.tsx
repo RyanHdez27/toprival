@@ -153,3 +153,142 @@ export function ModalDialog({ config, onClose }: { config: ModalConfig | null; o
     </div>
   );
 }
+
+export function TournamentShareModal({
+  tournament,
+  isOpen,
+  onClose,
+}: {
+  tournament: {
+    id: string;
+    title: string;
+    game: string;
+    gameIcon?: string;
+    mode?: string;
+    startDate?: string;
+    entryFee?: string;
+    prizePool?: string;
+  } | null;
+  isOpen: boolean;
+  onClose: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  if (!isOpen || !tournament) return null;
+
+  // URL directa y única para este torneo
+  const shareUrl = `${window.location.origin}${window.location.pathname}#/tournament/${tournament.id}`;
+  const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(shareUrl)}&bgcolor=18-18-27&color=212-134-10&margin=8`;
+
+  const handleCopyLink = async () => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = shareUrl;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    }
+  };
+
+  const handleWhatsAppShare = () => {
+    const text = `🔥 ¡Compite en el torneo de ${tournament.game}: "${tournament.title}" en TopRival! ⚔️\n🏆 Premio: ${tournament.prizePool || "Oficial"}\n📅 Fecha: ${tournament.startDate || "Próximamente"}\n🔗 Inscríbete o consulta el bracket aquí:\n${shareUrl}`;
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, "_blank");
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-[#111113] border border-[#D4860A]/40 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl shadow-black/80 animate-in zoom-in-95 duration-200">
+        {/* Header */}
+        <div className="p-5 border-b border-[#27272A] flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-[#D4860A]/20 border border-[#D4860A]/40 flex items-center justify-center text-lg">
+              {tournament.gameIcon || "🏆"}
+            </div>
+            <div>
+              <h3 className="font-bold text-sm text-[#FAFAFA] line-clamp-1">{tournament.title}</h3>
+              <p className="text-[11px] text-[#71717A]">{tournament.game} · {tournament.mode || "Competitivo"}</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-[#71717A] hover:text-[#FAFAFA] text-lg font-bold cursor-pointer w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#18181B] transition-colors"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-6 flex flex-col items-center text-center space-y-5">
+          {/* QR Code Container */}
+          <div className="relative p-4 rounded-2xl bg-[#18181B] border border-[#27272A] shadow-inner flex flex-col items-center">
+            <img
+              src={qrApiUrl}
+              alt={`QR para ${tournament.title}`}
+              className="w-48 h-48 rounded-xl object-contain"
+              loading="lazy"
+            />
+            <div className="mt-3 flex items-center gap-1.5 text-[11px] text-[#D4860A] font-semibold tracking-wide uppercase">
+              <span>📱</span> Escanea para acceder al torneo
+            </div>
+          </div>
+
+          {/* Direct link input */}
+          <div className="w-full space-y-2 text-left">
+            <label className="text-xs font-semibold text-[#A1A1AA] flex items-center justify-between">
+              <span>Enlace Directo del Torneo:</span>
+              <span className="text-[10px] text-[#71717A] font-mono">ID: {tournament.id}</span>
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                readOnly
+                value={shareUrl}
+                className="w-full bg-[#18181B] border border-[#27272A] focus:border-[#D4860A] rounded-xl px-3 py-2 text-xs text-[#FAFAFA] font-mono truncate focus:outline-none"
+              />
+              <Button
+                size="sm"
+                variant={copied ? "primary" : "outline"}
+                onClick={handleCopyLink}
+                className="shrink-0 text-xs px-3"
+              >
+                {copied ? "¡Copiado!" : "Copiar"}
+              </Button>
+            </div>
+          </div>
+
+          {/* Social share buttons */}
+          <div className="w-full pt-1 flex gap-2.5">
+            <Button
+              fullWidth
+              variant="outline"
+              size="sm"
+              onClick={handleWhatsAppShare}
+              className="justify-center text-xs border-[#22C55E]/30 text-[#22C55E] hover:bg-[#22C55E]/10"
+            >
+              💬 Compartir en WhatsApp
+            </Button>
+            <Button
+              fullWidth
+              variant="primary"
+              size="sm"
+              onClick={handleCopyLink}
+              className="justify-center text-xs font-bold"
+            >
+              {copied ? "✓ Enlace Copiado" : "🔗 Copiar Enlace"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

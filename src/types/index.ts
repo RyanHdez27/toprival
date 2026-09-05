@@ -37,6 +37,21 @@ export interface TeamMember {
   inGameName: string;
 }
 
+export interface SquadMember {
+  userId?: string;
+  name: string;
+  role: "Capitán" | "Titular" | "Refuerzo";
+}
+
+export interface SquadModel {
+  id: string;
+  name: string;
+  game: string;
+  tournamentName: string;
+  members: SquadMember[];
+  status: "ACTIVE" | "COMPLETED";
+}
+
 export interface Team {
   id: string;
   name: string;
@@ -89,6 +104,7 @@ export interface TournamentModel {
   status: TournamentStatus;
   format: TournamentFormat;
   mode: string; // ej: 5v5, 1v1, 3v3
+  description?: string;
   isTeamBased: boolean;
   teamSize?: number;
   entryFee: string;

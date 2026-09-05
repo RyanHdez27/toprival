@@ -6,7 +6,7 @@ import { api } from "../services/api";
 type Screen = "home" | "tournaments" | "rankings" | "dashboard" | "bracket" | "match" | "report" | "champion" | "login" | "register" | "detail" | "registration" | "confirmation" | "requests" | "team" | "admin";
 
 export function ReportResultScreen({ onNavigate }: { onNavigate: (s: Screen) => void }) {
-  const { currentMatch, reportMatchResult } = useApp();
+  const { currentMatch, reportMatchResult, currentUser } = useApp();
   const [myScore, setMyScore] = useState(2);
   const [rivalScore, setRivalScore] = useState(1);
   const [notes, setNotes] = useState("");
@@ -15,6 +15,10 @@ export function ReportResultScreen({ onNavigate }: { onNavigate: (s: Screen) => 
   const [evidenceUrl, setEvidenceUrl] = useState<string>("https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800&fit=crop&auto=format");
   const [fileName, setFileName] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+
+  const myNick = currentUser?.nickname || currentMatch?.participantA?.name || "Tú";
+  const rivalNick = (currentMatch?.participantA?.name === myNick ? currentMatch?.participantB?.name : currentMatch?.participantA?.name) || "Rival";
+  const roundTitle = currentMatch?.roundName || "Ronda Oficial";
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -92,7 +96,7 @@ export function ReportResultScreen({ onNavigate }: { onNavigate: (s: Screen) => 
             ← Volver al partido
           </button>
           <h1 className="text-xl font-bold text-[#FAFAFA]">Reportar Resultado</h1>
-          <p className="text-sm text-[#71717A] mt-1">Semifinal — TuNick vs ShadowX</p>
+          <p className="text-sm text-[#71717A] mt-1">{roundTitle} — {myNick} vs {rivalNick}</p>
         </div>
       </div>
 
@@ -103,7 +107,7 @@ export function ReportResultScreen({ onNavigate }: { onNavigate: (s: Screen) => 
           <div className="flex items-center justify-center gap-8">
             {/* My score */}
             <div className="flex flex-col items-center gap-3">
-              <span className="text-sm font-medium text-[#F5B830]">TuNick (tú)</span>
+              <span className="text-sm font-medium text-[#F5B830]">{myNick} (tú)</span>
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => setMyScore(Math.max(0, myScore - 1))}
@@ -127,7 +131,7 @@ export function ReportResultScreen({ onNavigate }: { onNavigate: (s: Screen) => 
 
             {/* Rival score */}
             <div className="flex flex-col items-center gap-3">
-              <span className="text-sm font-medium text-[#A1A1AA]">ShadowX</span>
+              <span className="text-sm font-medium text-[#A1A1AA]">{rivalNick}</span>
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => setRivalScore(Math.max(0, rivalScore - 1))}

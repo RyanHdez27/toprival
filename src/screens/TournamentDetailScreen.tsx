@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { Badge, Button, Card, Avatar, Icon, Divider } from "../components/ui";
+import { TournamentShareModal } from "../components/ModalDialog";
 
 type Screen =
   | "home"
@@ -21,6 +23,7 @@ type Screen =
 
 export function TournamentDetailScreen({ onNavigate }: { onNavigate: (s: Screen) => void }) {
   const { selectedTournament, tournaments, isAuthenticated, myTeam, currentUser } = useApp();
+  const [showShareModal, setShowShareModal] = useState(false);
   const tournament = selectedTournament || tournaments[0] || {
     id: "ff-live-01",
     title: "Torneo Oficial TopRival",
@@ -77,7 +80,7 @@ export function TournamentDetailScreen({ onNavigate }: { onNavigate: (s: Screen)
   return (
     <div className="min-h-screen bg-[#09090B]">
       {/* Banner */}
-      <div className="relative h-52 md:h-72 overflow-hidden">
+      <div className="relative h-56 md:h-72 overflow-hidden">
         <img
           src={tournament.bannerImage || "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=1440&h=288&fit=crop&auto=format"}
           alt={tournament.title}
@@ -87,12 +90,26 @@ export function TournamentDetailScreen({ onNavigate }: { onNavigate: (s: Screen)
         <div className="absolute inset-0 bg-gradient-to-r from-[#09090B]/80 to-transparent" />
 
         <div className="absolute bottom-6 left-4 md:left-6 right-4 md:right-6">
-          <button
-            onClick={() => onNavigate("tournaments")}
-            className="flex items-center gap-1 text-sm text-[#71717A] hover:text-[#A1A1AA] mb-3 cursor-pointer transition-colors"
-          >
-            ← Volver a Torneos
-          </button>
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <button
+              onClick={() => onNavigate("tournaments")}
+              className="flex items-center gap-1 text-sm text-[#71717A] hover:text-[#A1A1AA] cursor-pointer transition-colors"
+            >
+              ← Volver a Torneos
+            </button>
+
+            {/* Botón Compartir / Generar QR */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowShareModal(true)}
+              className="border-[#D4860A]/40 hover:border-[#D4860A] text-xs font-semibold text-[#FAFAFA] bg-[#111113]/80 backdrop-blur-sm shadow-md flex items-center gap-1.5"
+            >
+              <Icon.QrCode />
+              <span>Compartir / QR</span>
+            </Button>
+          </div>
+
           <div className="flex flex-wrap items-center gap-2 mb-2">
             <Badge variant={tournament.status === "live" ? "live" : "success"}>
               {tournament.status === "live" && (
@@ -143,8 +160,9 @@ export function TournamentDetailScreen({ onNavigate }: { onNavigate: (s: Screen)
           {/* Description */}
           <Card className="p-5">
             <h2 className="font-semibold text-[#FAFAFA] mb-3">Acerca del torneo</h2>
-            <p className="text-[#A1A1AA] text-sm leading-relaxed">
-              Torneo oficial organizado por TopRival para la comunidad competitiva de {tournament.game}. Formato {tournament.mode} con sistema automatizado de brackets, check-in previo y soporte de árbitros para validación de resultados.
+            <p className="text-[#A1A1AA] text-sm leading-relaxed whitespace-pre-line">
+              {tournament.description ||
+                `Torneo oficial organizado por TopRival para la comunidad competitiva de ${tournament.game}. Formato ${tournament.mode} con sistema automatizado de brackets, check-in previo y soporte de árbitros para validación de resultados.`}
             </p>
           </Card>
 
@@ -275,6 +293,17 @@ export function TournamentDetailScreen({ onNavigate }: { onNavigate: (s: Screen)
               </Button>
             )}
 
+            <Button
+              variant="outline"
+              fullWidth
+              size="sm"
+              className="mt-2 border-[#D4860A]/30 text-[#D4860A] hover:border-[#D4860A] flex items-center justify-center gap-2"
+              onClick={() => setShowShareModal(true)}
+            >
+              <Icon.QrCode />
+              <span>Compartir Torneo / Generar QR</span>
+            </Button>
+
             <p className="text-center text-xs text-[#71717A] mt-3">
               Al participar aceptas las reglas oficiales de TopRival
             </p>
@@ -322,6 +351,13 @@ export function TournamentDetailScreen({ onNavigate }: { onNavigate: (s: Screen)
           </Card>
         </div>
       </div>
+
+      {/* Modal de Compartir y Código QR */}
+      <TournamentShareModal
+        tournament={tournament}
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+      />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { Button, Badge, Icon, Card, Avatar } from "../components/ui";
+import { SquadModel } from "../types";
 
 interface ClanModel {
   id: string;
@@ -39,21 +40,6 @@ interface FreeAgentModel {
   isMe?: boolean;
 }
 
-interface SquadMember {
-  userId?: string;
-  name: string;
-  role: "Capitán" | "Titular" | "Refuerzo";
-}
-
-interface SquadModel {
-  id: string;
-  name: string;
-  game: string;
-  tournamentName: string;
-  members: SquadMember[];
-  status: "ACTIVE" | "COMPLETED";
-}
-
 interface TeamHistoryLog {
   id: string;
   date: string;
@@ -61,12 +47,147 @@ interface TeamHistoryLog {
   type: "CLAN" | "SQUAD" | "TRANSFER";
 }
 
-const INITIAL_PUBLIC_CLANS: ClanModel[] = [];
-const INITIAL_OPEN_SQUADS: OpenSquadModel[] = [];
-const INITIAL_FREE_AGENTS: FreeAgentModel[] = [];
+const INITIAL_PUBLIC_CLANS: ClanModel[] = [
+  {
+    id: "clan-furia",
+    name: "Furia LATAM Esports",
+    tag: "FURL",
+    game: "FreeFire",
+    membersCount: 4,
+    maxMembers: 6,
+    points: 420,
+    openSlots: 2,
+    leaderNick: "ViperKing",
+    type: "CLAN",
+  },
+  {
+    id: "clan-shadows",
+    name: "Shadow Syndicate",
+    tag: "SHDW",
+    game: "CODMobile",
+    membersCount: 3,
+    maxMembers: 5,
+    points: 380,
+    openSlots: 2,
+    leaderNick: "GhostRider",
+    type: "CLAN",
+  },
+  {
+    id: "clan-valiant",
+    name: "Valiant Titans",
+    tag: "VLNT",
+    game: "Valorant",
+    membersCount: 4,
+    maxMembers: 5,
+    points: 510,
+    openSlots: 1,
+    leaderNick: "TitanPrime",
+    type: "CLAN",
+  },
+];
+
+const INITIAL_OPEN_SQUADS: OpenSquadModel[] = [
+  {
+    id: "squad-apertura-01",
+    name: "Escuadra Alfa FreeFire",
+    game: "FreeFire",
+    tournamentName: "Copa Apertura FreeFire Squads",
+    membersCount: 3,
+    maxMembers: 4,
+    points: 290,
+    openSlots: 1,
+    captainNick: "SniperElite",
+    type: "SQUAD",
+  },
+  {
+    id: "squad-masters-02",
+    name: "Playoffs Rush Masters",
+    game: "FreeFire",
+    tournamentName: "FreeFire Masters LATAM - Playoffs",
+    membersCount: 3,
+    maxMembers: 4,
+    points: 340,
+    openSlots: 1,
+    captainNick: "RushGod",
+    type: "SQUAD",
+  },
+  {
+    id: "squad-warzone-03",
+    name: "Warzone Havoc Squad",
+    game: "Warzone",
+    tournamentName: "TopRival Championship 2026",
+    membersCount: 3,
+    maxMembers: 4,
+    points: 410,
+    openSlots: 1,
+    captainNick: "DeltaForce",
+    type: "SQUAD",
+  },
+];
+
+const INITIAL_FREE_AGENTS: FreeAgentModel[] = [
+  {
+    id: "fa-1",
+    nick: "ViperSniper",
+    game: "FreeFire",
+    rank: "Gran Maestro",
+    role: "Francotirador",
+    points: 380,
+    lookingFor: "Copa Apertura FreeFire Squads",
+  },
+  {
+    id: "fa-2",
+    nick: "ShadowRush",
+    game: "FreeFire",
+    rank: "Heroico",
+    role: "Rusher",
+    points: 290,
+    lookingFor: "Torneos PVP 4v4",
+  },
+  {
+    id: "fa-3",
+    nick: "ApexStriker",
+    game: "CODMobile",
+    rank: "Legendario",
+    role: "IGL / Estratega",
+    points: 340,
+    lookingFor: "Battle Royale Escuadras",
+  },
+  {
+    id: "fa-4",
+    nick: "NovaAim",
+    game: "Valorant",
+    rank: "Inmortal 2",
+    role: "Duelista / Iniciador",
+    points: 460,
+    lookingFor: "Competitivo 5v5",
+  },
+  {
+    id: "fa-5",
+    nick: "StrikerGol",
+    game: "FC Mobile",
+    rank: "Campeón FIFA",
+    role: "Delantero Centro",
+    points: 275,
+    lookingFor: "Torneo Cara a Cara 1v1",
+  },
+];
 
 export function TeamScreen() {
-  const { myTeam, currentUser, removeTeamMember, createOrJoinTeam, leaveClan, tournaments, showAlert, showConfirm } = useApp();
+  const {
+    myTeam,
+    currentUser,
+    removeTeamMember,
+    createOrJoinTeam,
+    leaveClan,
+    tournaments,
+    showAlert,
+    showConfirm,
+    squads: mySquads,
+    addSquad,
+    updateSquad,
+    removeSquad,
+  } = useApp();
   const [activeTab, setActiveTab] = useState<"roster" | "find-clan" | "free-agents" | "history">("roster");
 
   // Filtro en "Buscar Clan o Escuadra"
@@ -99,9 +220,6 @@ export function TeamScreen() {
 
   // Buscador de Agentes Libres
   const [agentSearch, setAgentSearch] = useState("");
-
-  // Escuadras y Logs
-  const [mySquads, setMySquads] = useState<SquadModel[]>([]);
 
   const [historyLogs, setHistoryLogs] = useState<TeamHistoryLog[]>([]);
 
@@ -228,7 +346,7 @@ export function TeamScreen() {
       status: "ACTIVE",
     };
 
-    setMySquads((prev) => [newSq, ...prev]);
+    addSquad(newSq);
     setHistoryLogs((prev) => [
       {
         id: `log-${Date.now()}`,
@@ -254,18 +372,13 @@ export function TeamScreen() {
     );
 
     if (ok) {
-      setMySquads(prev => prev.map(sq => {
-        if (sq.id === squadId) {
-          return {
-            ...sq,
-            members: sq.members.filter(m => m.name !== memberName)
-          };
-        }
-        return sq;
+      updateSquad(squadId, (sq) => ({
+        ...sq,
+        members: sq.members.filter((m) => m.name !== memberName),
       }));
-      setHistoryLogs(prev => [
+      setHistoryLogs((prev) => [
         { id: `log-${Date.now()}`, date: "Hoy", action: `Expulsaste a '${memberName}' de tu escuadra`, type: "TRANSFER" },
-        ...prev
+        ...prev,
       ]);
       showAlert("Jugador Expulsado", `Jugador ${memberName} expulsado de la escuadra.`, "info");
     }
@@ -282,10 +395,10 @@ export function TeamScreen() {
     );
 
     if (ok) {
-      setMySquads(prev => prev.filter(sq => sq.id !== squadId));
-      setHistoryLogs(prev => [
+      removeSquad(squadId);
+      setHistoryLogs((prev) => [
         { id: `log-${Date.now()}`, date: "Hoy", action: `Te retiraste de la escuadra '${squadName}'`, type: "TRANSFER" },
-        ...prev
+        ...prev,
       ]);
       showAlert("Escuadra Abandonada", `Te has retirado de la escuadra ${squadName}.`, "info");
     }
@@ -296,25 +409,20 @@ export function TeamScreen() {
     e.preventDefault();
     if (!reRegisterSquadModal) return;
 
-    setMySquads(prev => prev.map(sq => {
-      if (sq.id === reRegisterSquadModal.id) {
-        return {
-          ...sq,
-          tournamentName: selectedNewTourney,
-          status: "ACTIVE",
-        };
-      }
-      return sq;
+    updateSquad(reRegisterSquadModal.id, (sq) => ({
+      ...sq,
+      tournamentName: selectedNewTourney,
+      status: "ACTIVE",
     }));
 
-    setHistoryLogs(prev => [
+    setHistoryLogs((prev) => [
       {
         id: `log-${Date.now()}`,
         date: "Hoy",
         action: `Inscribiste la escuadra '${reRegisterSquadModal.name}' en ${selectedNewTourney}`,
-        type: "SQUAD"
+        type: "SQUAD",
       },
-      ...prev
+      ...prev,
     ]);
 
     showAlert("Escuadra Inscrita", `¡Escuadra '${reRegisterSquadModal.name}' inscrita con éxito a '${selectedNewTourney}'!`, "success");
@@ -766,9 +874,9 @@ export function TeamScreen() {
             {/* Clanes */}
             {(findFilter === "all" || findFilter === "clans") &&
               INITIAL_PUBLIC_CLANS.map((clan) => (
-                <Card key={clan.id} className="p-5 flex justify-between items-center border-[#27272A] hover:border-[#D4860A]/40 transition-colors">
+                <Card key={clan.id} className="p-5 flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-[#27272A] hover:border-[#D4860A]/40 transition-colors">
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-[#18181B] border border-[#D4860A] flex items-center justify-center font-bold text-[#D4860A]">
+                    <div className="w-12 h-12 rounded-xl bg-[#18181B] border border-[#D4860A] flex items-center justify-center font-bold text-[#D4860A] shrink-0">
                       {clan.tag}
                     </div>
                     <div>
@@ -779,7 +887,7 @@ export function TeamScreen() {
                       <p className="text-xs text-[#71717A]">
                         Juego: <strong className="text-[#A1A1AA]">{clan.game}</strong> • Líder: <strong className="text-[#FAFAFA]">{clan.leaderNick}</strong>
                       </p>
-                      <div className="flex gap-2 items-center mt-2">
+                      <div className="flex gap-2 items-center mt-2 flex-wrap">
                         <span className="text-[10px] text-[#F5B830] font-semibold bg-[#F5B830]/10 px-2 py-0.5 rounded">
                           {clan.openSlots} cupos disponibles
                         </span>
@@ -787,7 +895,31 @@ export function TeamScreen() {
                       </div>
                     </div>
                   </div>
-                  <Button size="sm" variant="outline" onClick={() => showAlert("Solicitud Enviada", `Solicitud de ingreso enviada exitosamente al clan ${clan.name}.`, "success")}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={async () => {
+                      const ok = await showConfirm(
+                        "Solicitar Ingreso al Clan",
+                        `¿Deseas enviar tu solicitud de ingreso al clan oficial "${clan.name}" [${clan.tag}]? Tu estado como Agente Libre se compartirá con el líder ${clan.leaderNick}.`,
+                        "Enviar Solicitud",
+                        "Cancelar",
+                        "info"
+                      );
+                      if (ok) {
+                        setHistoryLogs((prev) => [
+                          {
+                            id: `log-${Date.now()}`,
+                            date: "Hoy",
+                            action: `Enviaste solicitud de reclutamiento a ${clan.name}`,
+                            type: "TRANSFER",
+                          },
+                          ...prev,
+                        ]);
+                        showAlert("Solicitud Enviada", `¡Solicitud de ingreso enviada exitosamente al líder ${clan.leaderNick} del clan ${clan.name}!`, "success");
+                      }
+                    }}
+                  >
                     Solicitar Ingreso
                   </Button>
                 </Card>
@@ -796,9 +928,9 @@ export function TeamScreen() {
             {/* Escuadras de Torneo */}
             {(findFilter === "all" || findFilter === "squads") &&
               INITIAL_OPEN_SQUADS.map((sq) => (
-                <Card key={sq.id} className="p-5 flex justify-between items-center border-[#27272A] hover:border-[#3B82F6]/40 transition-colors bg-[#111113]">
+                <Card key={sq.id} className="p-5 flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-[#27272A] hover:border-[#3B82F6]/40 transition-colors bg-[#111113]">
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-[#18181B] border border-[#3B82F6] flex items-center justify-center text-xl">
+                    <div className="w-12 h-12 rounded-xl bg-[#18181B] border border-[#3B82F6] flex items-center justify-center text-xl shrink-0">
                       ⚔️
                     </div>
                     <div>
@@ -812,7 +944,7 @@ export function TeamScreen() {
                       <p className="text-xs text-[#71717A]">
                         Capitán: <strong className="text-[#FAFAFA]">{sq.captainNick}</strong> • Juego: {sq.game}
                       </p>
-                      <div className="flex gap-2 items-center mt-2">
+                      <div className="flex gap-2 items-center mt-2 flex-wrap">
                         <span className="text-[10px] text-[#3B82F6] font-semibold bg-[#3B82F6]/10 px-2 py-0.5 rounded">
                           {sq.openSlots} cupo disponible
                         </span>
@@ -820,8 +952,45 @@ export function TeamScreen() {
                       </div>
                     </div>
                   </div>
-                  <Button size="sm" variant="primary" onClick={() => showAlert("Solicitud Enviada", `Solicitud para unirte a la escuadra '${sq.name}' enviada con éxito.`, "success")}>
-                    Unirme al Torneo
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={async () => {
+                      const ok = await showConfirm(
+                        "Unirse a Escuadra",
+                        `¿Deseas sumarte como titular a la escuadra '${sq.name}' para competir en '${sq.tournamentName}'?`,
+                        "Unirme",
+                        "Cancelar",
+                        "info"
+                      );
+                      if (ok) {
+                        const newJoinedSquad: SquadModel = {
+                          id: `joined-${sq.id}-${Date.now()}`,
+                          name: sq.name,
+                          game: sq.game,
+                          tournamentName: sq.tournamentName,
+                          status: "ACTIVE",
+                          members: [
+                            { name: sq.captainNick, role: "Capitán" },
+                            { name: currentUser?.nickname || "Gamer", role: "Titular", userId: currentUser?.id },
+                          ],
+                        };
+                        setMySquads((prev) => [newJoinedSquad, ...prev]);
+                        setHistoryLogs((prev) => [
+                          {
+                            id: `log-${Date.now()}`,
+                            date: "Hoy",
+                            action: `Te uniste a la escuadra '${sq.name}' (${sq.tournamentName})`,
+                            type: "SQUAD",
+                          },
+                          ...prev,
+                        ]);
+                        setActiveTab("roster");
+                        showAlert("¡Te has unido!", `Te has integrado a la escuadra '${sq.name}' para '${sq.tournamentName}'.`, "success");
+                      }
+                    }}
+                  >
+                    Unirme a la Escuadra
                   </Button>
                 </Card>
               ))}
@@ -898,7 +1067,35 @@ export function TeamScreen() {
                     <div>Puntos TR: <strong className="text-[#22C55E]">{fa.points}</strong></div>
                   </div>
                   {!fa.isMe ? (
-                    <Button fullWidth size="sm" variant="primary" onClick={() => showAlert("Invitación Enviada", `Invitación de escuadra enviada exitosamente a ${fa.nick}.`, "success")}>
+                    <Button
+                      fullWidth
+                      size="sm"
+                      variant="primary"
+                      onClick={async () => {
+                        const canRecruitToClan = isCaptain && !isSolo;
+                        const ok = await showConfirm(
+                          "Fichar Agente Libre",
+                          canRecruitToClan
+                            ? `¿Deseas enviar oferta formal de fichaje a ${fa.nick} para incorporarlo a tu clan '${myTeam?.name}' o a tus escuadras de torneo?`
+                            : `¿Deseas invitar a ${fa.nick} a formar equipo / escuadra contigo para '${fa.lookingFor}'?`,
+                          "Enviar Fichaje",
+                          "Cancelar",
+                          "info"
+                        );
+                        if (ok) {
+                          setHistoryLogs((prev) => [
+                            {
+                              id: `log-${Date.now()}`,
+                              date: "Hoy",
+                              action: `Enviaste oferta de fichaje al agente libre ${fa.nick} (${fa.role})`,
+                              type: "TRANSFER",
+                            },
+                            ...prev,
+                          ]);
+                          showAlert("Oferta de Fichaje Enviada", `¡Has enviado oferta formal a ${fa.nick}! Se le notificará a su bandeja competitiva.`, "success");
+                        }
+                      }}
+                    >
                       Fichar para mi Escuadra
                     </Button>
                   ) : (

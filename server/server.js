@@ -127,12 +127,11 @@ pool.query('SELECT NOW()', async (err, res) => {
       const salt = await bcrypt.genSalt(10);
       const adminPassHash = await bcrypt.hash(adminPass, salt);
 
-      // 1. Eliminar cualquier usuario previo dummy 'admin@toprival.gg' si existe
-      await pool.query("DELETE FROM users WHERE email = 'admin@toprival.gg'");
-
-      // 2. Comprobar si ryan.hdez27@gmail.com ya existe y promoverlo a ADMIN con la nueva clave
+      // 1. Asegurar o crear primero al Super Administrador Oficial
+      let officialAdminId;
       const checkAdmin = await pool.query('SELECT id FROM users WHERE email = $1', [adminEmail]);
       if (checkAdmin.rows.length > 0) {
+        officialAdminId = checkAdmin.rows[0].id;
         await pool.query(
           `UPDATE users 
            SET role = 'ADMIN', password_hash = $1, is_verified = true, nickname = 'RyanAdmin'
@@ -141,12 +140,28 @@ pool.query('SELECT NOW()', async (err, res) => {
         );
         console.log('👑 Usuario ryan.hdez27@gmail.com actualizado a ADMIN oficial con clave Hdez1007.');
       } else {
-        await pool.query(
+        const insertAdmin = await pool.query(
           `INSERT INTO users (email, nickname, password_hash, role, points, is_verified)
-           VALUES ($1, 'RyanAdmin', $2, 'ADMIN', 5000, true)`,
+           VALUES ($1, 'RyanAdmin', $2, 'ADMIN', 5000, true)
+           RETURNING id`,
           [adminEmail, adminPassHash]
         );
+        officialAdminId = insertAdmin.rows[0].id;
         console.log('👑 Usuario ADMIN ryan.hdez27@gmail.com creado exitosamente.');
+      }
+
+      // 2. Si existía el usuario dummy anterior 'admin@toprival.gg', reasignar sus torneos al admin oficial antes de borrarlo
+      const legacyAdmin = await pool.query("SELECT id FROM users WHERE email = 'admin@toprival.gg'");
+      if (legacyAdmin.rows.length > 0) {
+        const legacyId = legacyAdmin.rows[0].id;
+        // Reasignar cualquier torneo creado por el admin anterior al nuevo admin oficial
+        await pool.query(
+          'UPDATE tournaments SET created_by = $1 WHERE created_by = $2',
+          [officialAdminId, legacyId]
+        );
+        // Ahora sí se puede eliminar el usuario dummy de forma segura sin violar la FK
+        await pool.query('DELETE FROM users WHERE id = $1', [legacyId]);
+        console.log('🧹 Torneos previos reasignados al admin oficial y cuenta dummy admin@toprival.gg removida.');
       }
     } catch (schemaErr) {
       console.error('⚠️ Error en inicialización / migración de usuario:', schemaErr.message);

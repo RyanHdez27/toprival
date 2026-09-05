@@ -211,7 +211,7 @@ export function Navbar({
                       {currentUser?.nickname || "Gamer"}
                     </span>
                     <span className="text-[10px] text-[#D4860A] font-semibold">
-                      {currentRole === "ADMIN" ? "SUPER ADMIN" : currentRole === "REFEREE" ? "OFICIAL REFEREE" : "JUGADOR / CAPITÁN"}
+                      {currentRole === "ADMIN" ? "SUPER ADMIN" : currentRole === "REFEREE" ? "OFICIAL REFEREE" : currentRole === "TEAM_CAPTAIN" ? "CAPITÁN DE EQUIPO" : "JUGADOR (AGENTE LIBRE)"}
                     </span>
                   </div>
                   <span className={`text-xs text-[#71717A] transition-transform ${dropdownOpen ? "rotate-180" : ""}`}>
@@ -231,7 +231,7 @@ export function Navbar({
                         {currentUser?.email || "usuario@toprival.gg"}
                       </p>
                       <span className="inline-block mt-1 px-1.5 py-0.5 text-[9px] font-bold rounded bg-[#D4860A]/15 text-[#D4860A] border border-[#D4860A]/30">
-                        {currentRole === "ADMIN" ? "SUPER ADMIN" : currentRole === "REFEREE" ? "OFICIAL REFEREE STAFF" : "JUGADOR / CAPITÁN"}
+                        {currentRole === "ADMIN" ? "SUPER ADMIN" : currentRole === "REFEREE" ? "OFICIAL REFEREE STAFF" : currentRole === "TEAM_CAPTAIN" ? "CAPITÁN DE EQUIPO" : "JUGADOR"}
                       </span>
                     </div>
 

@@ -51,17 +51,35 @@ export default function App() {
 }
 
 function MainLayout() {
-  const { isAuthenticated, currentRole } = useApp();
+  const { isAuthenticated, currentRole, setSelectedTournamentId } = useApp();
 
   const getScreenFromHash = (): Screen => {
-    const hash = window.location.hash.replace(/^#\/?/, "") as Screen;
+    const rawHash = window.location.hash.replace(/^#\/?/, "");
+
+    // Soporte para URL directa de torneo: #/tournament/:id o #/detail/:id o #/detail?id=:id
+    if (rawHash.startsWith("tournament/") || rawHash.startsWith("detail/")) {
+      const tourneyId = rawHash.split("/")[1];
+      if (tourneyId) {
+        setSelectedTournamentId(tourneyId);
+      }
+      return "detail";
+    }
+
+    if (rawHash.startsWith("detail?id=")) {
+      const tourneyId = rawHash.split("id=")[1];
+      if (tourneyId) {
+        setSelectedTournamentId(tourneyId);
+      }
+      return "detail";
+    }
+
     const validScreens: Screen[] = [
       "home", "tournaments", "rankings", "requests", "team", "admin",
       "dashboard", "bracket", "match", "report", "champion", "login",
       "register", "detail", "registration", "confirmation", "settings",
       "referee"
     ];
-    return validScreens.includes(hash) ? hash : "home";
+    return validScreens.includes(rawHash as Screen) ? (rawHash as Screen) : "home";
   };
 
   const [screen, setScreen] = useState<Screen>(getScreenFromHash);
@@ -76,7 +94,7 @@ function MainLayout() {
     }
   };
 
-  // Escuchar botones Atrás y Adelante del navegador
+  // Escuchar botones Atrás, Adelante y cambios de URL del navegador
   useEffect(() => {
     const handlePopState = () => {
       const current = getScreenFromHash();

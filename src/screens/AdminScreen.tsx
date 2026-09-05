@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import { Button, Badge, Icon, Card } from "../components/ui";
+import { TournamentShareModal } from "../components/ModalDialog";
 import { TournamentModel, TournamentStatus } from "../types";
 
 const OFFICIAL_GAMES = [
@@ -115,6 +116,7 @@ export function AdminScreen() {
   const [editingTournament, setEditingTournament] = useState<TournamentModel | null>(null);
   const [convertedRequestId, setConvertedRequestId] = useState<string | null>(null);
   const [participantsModalTourney, setParticipantsModalTourney] = useState<TournamentModel | null>(null);
+  const [shareModalTourney, setShareModalTourney] = useState<TournamentModel | null>(null);
   const [newParticipantName, setNewParticipantName] = useState("");
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
 
@@ -126,6 +128,7 @@ export function AdminScreen() {
   const [prizePool, setPrizePool] = useState("");
   const [entryFee, setEntryFee] = useState("Gratis");
   const [maxParticipants, setMaxParticipants] = useState(16);
+  const [description, setDescription] = useState("");
   const [startDate, setStartDate] = useState("15 Sep 2026");
   const [startTime, setStartTime] = useState("19:00 COT");
   const [rulesText, setRulesText] = useState("Tolerancia reglamentaria: 15 minutos. Obligatorio subir captura HD de resultados.");
@@ -163,6 +166,7 @@ export function AdminScreen() {
     setPrizePool("");
     setEntryFee("Gratis");
     setMaxParticipants(16);
+    setDescription("Torneo oficial de TopRival. Revisa las reglas, horario y recomendaciones para tu escuadra.");
     setStartDate("15 Sep 2026");
     setStartTime("19:00 COT");
     setRulesText("Tolerancia reglamentaria: 15 minutos. Obligatorio subir captura HD de resultados.");
@@ -179,6 +183,7 @@ export function AdminScreen() {
     setPrizePool(t.prizePool);
     setEntryFee(t.entryFee);
     setMaxParticipants(t.maxParticipants);
+    setDescription(t.description || "Torneo oficial de TopRival. Revisa las reglas, horario y recomendaciones para tu escuadra.");
     setStartDate(t.startDate);
     setStartTime(t.startTime);
     setRulesText(t.rules?.rulesText || "");
@@ -196,6 +201,7 @@ export function AdminScreen() {
     setPrizePool("$300 USD");
     setEntryFee("Gratis");
     setMaxParticipants(req.targetParticipants || 16);
+    setDescription(req.description || `Torneo originado por iniciativa comunitaria de ${req.suggestedBy}.`);
     setStartDate(req.suggestedDate || "20 Sep 2026");
     setStartTime("19:00 COT");
     setRulesText(`Torneo originado por iniciativa comunitaria de ${req.suggestedBy}.`);
@@ -212,6 +218,7 @@ export function AdminScreen() {
       updateTournamentByAdmin(editingTournament.id, {
         title,
         ...(editingTournament.status !== "live" ? { game, gameIcon, mode, maxParticipants } : {}),
+        description,
         prizePool,
         entryFee,
         startDate,
@@ -243,6 +250,7 @@ export function AdminScreen() {
         game,
         gameIcon,
         mode,
+        description,
         prizePool,
         entryFee,
         maxParticipants,
@@ -539,6 +547,14 @@ export function AdminScreen() {
                     </div>
 
                     <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 text-xs text-[#D4860A] border-[#D4860A]/40 hover:bg-[#D4860A]/10"
+                        onClick={() => setShareModalTourney(t)}
+                      >
+                        <Icon.QrCode className="w-3.5 h-3.5 mr-1 inline" /> QR / Link
+                      </Button>
                       <Button
                         variant="outline"
                         size="sm"
@@ -1234,6 +1250,19 @@ export function AdminScreen() {
 
               <div>
                 <label className="block text-xs font-semibold text-[#A1A1AA] uppercase tracking-wider mb-1.5">
+                  Descripción e Información Clave para Jugadores (Visible en Registro y Detalles)
+                </label>
+                <textarea
+                  rows={3}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Coloca aquí información importante del torneo: premios, requisitos, recomendaciones, canal de Discord, etc."
+                  className="w-full bg-[#18181B] border border-[#27272A] rounded-lg px-3 py-2 text-xs text-[#FAFAFA] placeholder:text-[#52525B] focus:outline-none focus:border-[#D4860A]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#A1A1AA] uppercase tracking-wider mb-1.5">
                   Reglamento Específico del Torneo
                 </label>
                 <textarea
@@ -1388,6 +1417,13 @@ export function AdminScreen() {
           </div>
         </div>
       )}
+
+      {/* Modal Compartir / Generar QR */}
+      <TournamentShareModal
+        tournament={shareModalTourney}
+        isOpen={!!shareModalTourney}
+        onClose={() => setShareModalTourney(null)}
+      />
     </div>
   );
 }

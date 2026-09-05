@@ -38,9 +38,144 @@ interface SquadRankItem {
   isCurrentSquad?: boolean;
 }
 
-const INDIVIDUAL_RANKINGS: IndividualRankItem[] = [];
-const CLAN_RANKINGS: ClanRankItem[] = [];
-const SQUAD_RANKINGS: SquadRankItem[] = [];
+const INDIVIDUAL_RANKINGS: IndividualRankItem[] = [
+  {
+    rank: 1,
+    name: "AlphaSniper",
+    game: "FreeFire",
+    points: 1250,
+    wins: 18,
+    games: 22,
+    wr: 82,
+    prize: "$650 USD",
+  },
+  {
+    rank: 2,
+    name: "ViperKing",
+    game: "FreeFire",
+    points: 1120,
+    wins: 15,
+    games: 20,
+    wr: 75,
+    prize: "$400 USD",
+  },
+  {
+    rank: 3,
+    name: "TitanPrime",
+    game: "Valorant",
+    points: 980,
+    wins: 14,
+    games: 19,
+    wr: 74,
+    prize: "$300 USD",
+  },
+  {
+    rank: 4,
+    name: "GhostRider",
+    game: "CODMobile",
+    points: 870,
+    wins: 12,
+    games: 18,
+    wr: 67,
+    prize: "$200 USD",
+  },
+  {
+    rank: 5,
+    name: "DeltaForce",
+    game: "Warzone",
+    points: 810,
+    wins: 10,
+    games: 16,
+    wr: 63,
+    prize: "$150 USD",
+  },
+  {
+    rank: 6,
+    name: "StrikerGol",
+    game: "FC Mobile",
+    points: 740,
+    wins: 9,
+    games: 15,
+    wr: 60,
+    prize: "$100 USD",
+  },
+];
+
+const CLAN_RANKINGS: ClanRankItem[] = [
+  {
+    rank: 1,
+    name: "Furia LATAM Esports",
+    tag: "FURL",
+    game: "FreeFire",
+    points: 3450,
+    tournamentsWon: 5,
+    members: 6,
+    prize: "$1,800 USD",
+  },
+  {
+    rank: 2,
+    name: "Valiant Titans",
+    tag: "VLNT",
+    game: "Valorant",
+    points: 2980,
+    tournamentsWon: 4,
+    members: 5,
+    prize: "$1,200 USD",
+  },
+  {
+    rank: 3,
+    name: "Shadow Syndicate",
+    tag: "SHDW",
+    game: "CODMobile",
+    points: 2640,
+    tournamentsWon: 3,
+    members: 5,
+    prize: "$900 USD",
+  },
+  {
+    rank: 4,
+    name: "Leviatán Academy",
+    tag: "LEV",
+    game: "Valorant",
+    points: 2150,
+    tournamentsWon: 2,
+    members: 6,
+    prize: "$600 USD",
+  },
+];
+
+const SQUAD_RANKINGS: SquadRankItem[] = [
+  {
+    rank: 1,
+    name: "Escuadra Alfa FreeFire",
+    tournamentName: "Copa Apertura FreeFire Squads",
+    game: "FreeFire",
+    captain: "AlphaSniper",
+    points: 890,
+    matchesWon: 8,
+    prize: "$500 USD",
+  },
+  {
+    rank: 2,
+    name: "Playoffs Rush Masters",
+    tournamentName: "FreeFire Masters LATAM - Playoffs",
+    game: "FreeFire",
+    captain: "RushGod",
+    points: 760,
+    matchesWon: 6,
+    prize: "$350 USD",
+  },
+  {
+    rank: 3,
+    name: "Warzone Havoc Squad",
+    tournamentName: "TopRival Championship 2026",
+    game: "Warzone",
+    captain: "DeltaForce",
+    points: 680,
+    matchesWon: 5,
+    prize: "$250 USD",
+  },
+];
 
 const GAMES_LIST = [
   "Todos los juegos",
@@ -56,10 +191,14 @@ const GAMES_LIST = [
 ];
 
 export function RankingsScreen() {
-  const { currentUser, myTeam, currentRole, isAuthenticated, tournaments, referees } = useApp();
+  const { currentUser, myTeam, currentRole, isAuthenticated, tournaments, referees, showAlert } = useApp();
   const [rankingType, setRankingType] = useState<"individual" | "clans" | "squads">("individual");
   const [selectedGame, setSelectedGame] = useState("Todos los juegos");
   const [showAdminMetrics, setShowAdminMetrics] = useState(false);
+  const [selectedDetailItem, setSelectedDetailItem] = useState<{
+    type: "individual" | "clans" | "squads";
+    data: any;
+  } | null>(null);
 
   const isAdmin = isAuthenticated && currentRole === "ADMIN";
 
@@ -333,7 +472,8 @@ export function RankingsScreen() {
                       currentIndividualList.map((player) => (
                         <tr
                           key={player.name}
-                          className={player.isCurrentUser ? "bg-[#D4860A]/10 font-medium" : "hover:bg-[#18181B]/50 transition-colors"}
+                          onClick={() => setSelectedDetailItem({ type: "individual", data: player })}
+                          className={`${player.isCurrentUser ? "bg-[#D4860A]/10 font-medium" : "hover:bg-[#18181B]/50"} transition-colors cursor-pointer`}
                         >
                           <td className="p-3.5 font-bold font-mono text-xs">
                             {player.rank === 1 ? "🥇 1" : player.rank === 2 ? "🥈 2" : player.rank === 3 ? "🥉 3" : `#${player.rank}`}
@@ -355,7 +495,8 @@ export function RankingsScreen() {
                       currentClanList.map((clan) => (
                         <tr
                           key={clan.name}
-                          className={clan.isCurrentClan ? "bg-[#D4860A]/10 font-medium" : "hover:bg-[#18181B]/50 transition-colors"}
+                          onClick={() => setSelectedDetailItem({ type: "clans", data: clan })}
+                          className={`${clan.isCurrentClan ? "bg-[#D4860A]/10 font-medium" : "hover:bg-[#18181B]/50"} transition-colors cursor-pointer`}
                         >
                           <td className="p-3.5 font-bold font-mono text-xs">
                             {clan.rank === 1 ? "🥇 1" : clan.rank === 2 ? "🥈 2" : clan.rank === 3 ? "🥉 3" : `#${clan.rank}`}
@@ -379,7 +520,8 @@ export function RankingsScreen() {
                       currentSquadList.map((sq) => (
                         <tr
                           key={sq.name}
-                          className={sq.isCurrentSquad ? "bg-[#D4860A]/10 font-medium" : "hover:bg-[#18181B]/50 transition-colors"}
+                          onClick={() => setSelectedDetailItem({ type: "squads", data: sq })}
+                          className={`${sq.isCurrentSquad ? "bg-[#D4860A]/10 font-medium" : "hover:bg-[#18181B]/50"} transition-colors cursor-pointer`}
                         >
                           <td className="p-3.5 font-bold font-mono text-xs">
                             {sq.rank === 1 ? "🥇 1" : sq.rank === 2 ? "🥈 2" : sq.rank === 3 ? "🥉 3" : `#${sq.rank}`}
@@ -406,6 +548,100 @@ export function RankingsScreen() {
           </>
         )}
       </div>
+
+      {/* Modal de Detalle Competitivo Interactivo */}
+      {selectedDetailItem && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#111113] border border-[#27272A] rounded-2xl w-full max-w-md p-6 animate-in fade-in zoom-in-95 shadow-2xl space-y-4">
+            <div className="flex justify-between items-start border-b border-[#27272A] pb-3">
+              <div className="flex items-center gap-3">
+                {selectedDetailItem.type === "individual" ? (
+                  <Avatar name={selectedDetailItem.data.name} size={44} />
+                ) : selectedDetailItem.type === "clans" ? (
+                  <div className="w-11 h-11 rounded-xl bg-[#18181B] border border-[#D4860A] flex items-center justify-center font-bold text-sm text-[#D4860A]">
+                    {selectedDetailItem.data.tag}
+                  </div>
+                ) : (
+                  <div className="w-11 h-11 rounded-xl bg-[#18181B] border border-[#3B82F6] flex items-center justify-center text-2xl">
+                    ⚔️
+                  </div>
+                )}
+                <div>
+                  <h3 className="text-lg font-bold text-[#FAFAFA] flex items-center gap-2">
+                    {selectedDetailItem.data.name}
+                    <span className="text-xs px-2 py-0.5 rounded font-mono font-bold bg-[#D4860A]/15 text-[#D4860A]">
+                      #{selectedDetailItem.data.rank}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-[#71717A]">
+                    {selectedDetailItem.type === "individual"
+                      ? `Perfil de Jugador · ${selectedDetailItem.data.game}`
+                      : selectedDetailItem.type === "clans"
+                      ? `Clan Oficial · Tag: [${selectedDetailItem.data.tag}]`
+                      : `Escuadra · Torneo: ${selectedDetailItem.data.tournamentName}`}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedDetailItem(null)}
+                className="text-[#71717A] hover:text-[#FAFAFA] font-bold text-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Stats Breakdown */}
+            <div className="grid grid-cols-3 gap-2 bg-[#18181B] p-3 rounded-xl border border-[#27272A] text-center">
+              <div>
+                <span className="text-[10px] text-[#71717A] uppercase font-semibold block">Puntos TR</span>
+                <span className="text-base font-bold font-mono text-[#F5B830]">{selectedDetailItem.data.points}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-[#71717A] uppercase font-semibold block">
+                  {selectedDetailItem.type === "clans" ? "Títulos" : "Victorias"}
+                </span>
+                <span className="text-base font-bold font-mono text-[#22C55E]">
+                  {selectedDetailItem.type === "clans"
+                    ? selectedDetailItem.data.tournamentsWon
+                    : selectedDetailItem.type === "squads"
+                    ? selectedDetailItem.data.matchesWon
+                    : selectedDetailItem.data.wins}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] text-[#71717A] uppercase font-semibold block">Premios</span>
+                <span className="text-base font-bold font-mono text-[#FAFAFA]">{selectedDetailItem.data.prize}</span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-[#18181B]/60 rounded-xl border border-[#27272A] text-xs text-[#A1A1AA] space-y-1.5">
+              <div className="flex justify-between">
+                <span>Certificación Fair Play:</span>
+                <span className="text-[#22C55E] font-semibold">✓ Verificado por TopRival</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Juego Principal:</span>
+                <strong className="text-[#FAFAFA]">{selectedDetailItem.data.game}</strong>
+              </div>
+              {selectedDetailItem.type === "individual" && (
+                <div className="flex justify-between">
+                  <span>Win Rate Oficial:</span>
+                  <strong className="text-[#22C55E]">{selectedDetailItem.data.wr}%</strong>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2">
+              <button
+                onClick={() => setSelectedDetailItem(null)}
+                className="px-4 py-2 rounded-lg bg-[#27272A] text-xs font-semibold text-[#FAFAFA] hover:bg-[#3F3F46] transition-colors cursor-pointer"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

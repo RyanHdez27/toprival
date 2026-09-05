@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS tournaments (
     team_size INT DEFAULT 5,
     entry_fee VARCHAR(50) DEFAULT 'Gratis',
     prize_pool VARCHAR(100) NOT NULL,
+    description TEXT,
     min_participants INT DEFAULT 4,
     max_participants INT NOT NULL,
     start_date DATE NOT NULL,
