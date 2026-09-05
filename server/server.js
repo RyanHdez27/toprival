@@ -750,7 +750,7 @@ app.post('/api/admin/tournaments', authenticateToken, requireAdmin, async (req, 
 // Editar torneo oficial (Admin)
 app.put('/api/admin/tournaments/:id', authenticateToken, requireAdmin, async (req, res) => {
   const { id } = req.params;
-  const { title, game, mode, prizePool, status, startDate, startTime, rulesText } = req.body;
+  const { title, game, mode, prizePool, status, startDate, startTime, rulesText, entryFee } = req.body;
   try {
     const dbStatus = status ? status.toUpperCase().replace('-', '_') : undefined;
     await pool.query(
@@ -762,9 +762,10 @@ app.put('/api/admin/tournaments/:id', authenticateToken, requireAdmin, async (re
            status = COALESCE($5, status),
            start_date = COALESCE($6, start_date),
            start_time = COALESCE($7, start_time),
-           rules_text = COALESCE($8, rules_text)
-       WHERE id = $9`,
-      [title, game, mode, prizePool, dbStatus, startDate, startTime, rulesText, id]
+           rules_text = COALESCE($8, rules_text),
+           entry_fee = COALESCE($9, entry_fee)
+       WHERE id = $10`,
+      [title, game, mode, prizePool, dbStatus, startDate, startTime, rulesText, entryFee, id]
     );
 
     await logSystemEvent('TOURNAMENT', 'Torneo Editado', req.user.nickname || 'Admin', `Parámetros actualizados para torneo ID: ${id}`, 'INFO');
