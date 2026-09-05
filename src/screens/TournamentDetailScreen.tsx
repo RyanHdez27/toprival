@@ -117,7 +117,7 @@ export function TournamentDetailScreen({ onNavigate }: { onNavigate: (s: Screen)
             {[
               { icon: <Icon.Trophy />, label: "Premio", value: tournament.prizePool, color: "text-[#F5B830]" },
               { icon: <Icon.Calendar />, label: "Fecha", value: tournament.startDate, color: "text-[#FAFAFA]" },
-              { icon: <Icon.Clock />, label: "Hora", value: tournament.startTime, color: "text-[#FAFAFA]" },
+              { icon: <Icon.CreditCard />, label: "Inscripción", value: tournament.entryFee || "Gratis", color: tournament.entryFee && tournament.entryFee !== "Gratis" ? "text-[#22C55E]" : "text-[#A1A1AA]" },
               { icon: <Icon.Users />, label: "Cupos", value: `${currentCount} / ${maxCount}`, color: "text-[#F59E0B]" },
             ].map((item) => (
               <Card key={item.label} className="p-4">

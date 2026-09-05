@@ -1120,7 +1120,7 @@ export function AdminScreen() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-[#A1A1AA] uppercase tracking-wider mb-1.5">
                     Formato de Serie
@@ -1147,6 +1147,37 @@ export function AdminScreen() {
                     placeholder="Ej: $500 USD"
                     className="w-full bg-[#18181B] border border-[#27272A] rounded-lg px-3 py-2 text-sm text-[#FAFAFA] focus:outline-none focus:border-[#D4860A]"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#A1A1AA] uppercase tracking-wider mb-1.5">
+                    Costo Inscripción (Wompi)
+                  </label>
+                  <div className="space-y-1">
+                    <input
+                      type="text"
+                      value={entryFee}
+                      onChange={(e) => setEntryFee(e.target.value)}
+                      placeholder="Ej: $25.000 COP o Gratis"
+                      className="w-full bg-[#18181B] border border-[#27272A] rounded-lg px-3 py-2 text-sm text-[#FAFAFA] focus:outline-none focus:border-[#D4860A]"
+                    />
+                    <div className="flex gap-1 flex-wrap">
+                      {["Gratis", "$15.000 COP", "$25.000 COP"].map((fee) => (
+                        <button
+                          key={fee}
+                          type="button"
+                          onClick={() => setEntryFee(fee)}
+                          className={`text-[9px] px-1.5 py-0.5 rounded cursor-pointer transition-colors ${
+                            entryFee === fee
+                              ? "bg-[#D4860A] text-white font-bold"
+                              : "bg-[#27272A] text-[#A1A1AA] hover:text-white"
+                          }`}
+                        >
+                          {fee}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
                 <div>

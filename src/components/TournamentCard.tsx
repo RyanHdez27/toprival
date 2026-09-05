@@ -119,12 +119,23 @@ export function TournamentCard({
           {tournament.mode}
         </p>
 
-        {/* Prize */}
-        <div className="flex items-center gap-1.5 mb-4">
-          <Icon.Trophy />
-          <span className="text-[#F5B830] font-bold text-lg">
-            {tournament.prizePool || tournament.prize || "$0 USD"}
-          </span>
+        {/* Prize & Entry Fee */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-1.5">
+            <Icon.Trophy />
+            <span className="text-[#F5B830] font-bold text-lg">
+              {tournament.prizePool || tournament.prize || "$0 USD"}
+            </span>
+          </div>
+          {tournament.entryFee && !["gratis", "free", "$0", "0"].includes(String(tournament.entryFee).toLowerCase().trim()) ? (
+            <Badge variant="primary" className="text-[10px]">
+              💳 {tournament.entryFee}
+            </Badge>
+          ) : (
+            <Badge variant="muted" className="text-[10px]">
+              Entrada Gratis
+            </Badge>
+          )}
         </div>
 
         {/* Meta grid */}
