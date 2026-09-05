@@ -101,12 +101,22 @@ const poolConfig = process.env.DATABASE_URL
 
 const pool = new Pool(poolConfig);
 
-// Probar conexión a Postgres
-pool.query('SELECT NOW()', (err, res) => {
+// Probar conexión a Postgres e inicializar tablas
+pool.query('SELECT NOW()', async (err, res) => {
   if (err) {
-    console.warn('⚠️ Nota PostgreSQL: No se pudo conectar a Postgres en localhost:5432 (' + err.message + '). El servidor responderá con fallback resiliente para desarrollo.');
+    console.warn('⚠️ Nota PostgreSQL: No se pudo conectar a Postgres (' + err.message + '). El servidor responderá con fallback resiliente para desarrollo.');
   } else {
     console.log('✅ Conexión establecida con PostgreSQL:', res.rows[0].now);
+    try {
+      const schemaPath = path.join(__dirname, 'schema.sql');
+      if (fs.existsSync(schemaPath)) {
+        const sql = fs.readFileSync(schemaPath, 'utf8');
+        await pool.query(sql);
+        console.log('✅ Tablas y esquema de base de datos inicializados en PostgreSQL.');
+      }
+    } catch (schemaErr) {
+      console.error('⚠️ Error al aplicar esquema SQL inicial:', schemaErr.message);
+    }
   }
 });
 
