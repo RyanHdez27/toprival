@@ -191,7 +191,7 @@ const GAMES_LIST = [
 ];
 
 export function RankingsScreen() {
-  const { currentUser, myTeam, currentRole, isAuthenticated, tournaments, referees, showAlert } = useApp();
+  const { currentUser, myTeam, currentRole, isAuthenticated, tournaments, referees, squads, showAlert } = useApp();
   const [rankingType, setRankingType] = useState<"individual" | "clans" | "squads">("individual");
   const [selectedGame, setSelectedGame] = useState("Todos los juegos");
   const [showAdminMetrics, setShowAdminMetrics] = useState(false);
@@ -234,6 +234,19 @@ export function RankingsScreen() {
         }
       : null;
 
+  // Escuadras reales creadas por el usuario
+  const userSquadRankItems: SquadRankItem[] = (squads || []).map((sq) => ({
+    rank: 1,
+    name: sq.name,
+    tournamentName: sq.tournamentName || "Torneo Oficial",
+    game: sq.game || "Multijuego",
+    captain: sq.members.find((m) => m.role === "Capitán")?.name || currentUser?.nickname || "Capitán",
+    points: currentUser?.points || 150,
+    matchesWon: 2,
+    prize: "$0 USD",
+    isCurrentSquad: true,
+  }));
+
   const currentIndividualList = [
     ...INDIVIDUAL_RANKINGS.filter((p) => selectedGame === "Todos los juegos" || p.game === selectedGame),
     ...(userRankData && (selectedGame === "Todos los juegos" || userRankData.game === selectedGame) ? [userRankData] : []),
@@ -248,9 +261,10 @@ export function RankingsScreen() {
     .sort((a, b) => b.points - a.points)
     .map((item, index) => ({ ...item, rank: index + 1 }));
 
-  const currentSquadList = SQUAD_RANKINGS.filter(
-    (s) => selectedGame === "Todos los juegos" || s.game === selectedGame
-  )
+  const currentSquadList = [
+    ...SQUAD_RANKINGS.filter((s) => selectedGame === "Todos los juegos" || s.game === selectedGame),
+    ...userSquadRankItems.filter((s) => selectedGame === "Todos los juegos" || s.game === selectedGame),
+  ]
     .sort((a, b) => b.points - a.points)
     .map((item, index) => ({ ...item, rank: index + 1 }));
 
