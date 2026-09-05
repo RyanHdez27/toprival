@@ -69,6 +69,16 @@ export function RegistrationScreen({ onNavigate }: { onNavigate: (s: Screen) => 
     }
   }, []);
 
+  // Sincronizar nickname y discord cuando el perfil del usuario se actualice
+  useEffect(() => {
+    if (currentUser?.nickname && currentUser.nickname !== "Invitado") {
+      setNick(currentUser.nickname);
+    }
+    if (currentUser?.discordTag) {
+      setDiscord(currentUser.discordTag);
+    }
+  }, [currentUser]);
+
   const handleInitiatePayment = async () => {
     setIsProcessing(true);
     try {

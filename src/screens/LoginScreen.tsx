@@ -44,29 +44,10 @@ export function LoginScreen({ onNavigate }: { onNavigate: (s: Screen) => void })
           onNavigate("dashboard");
         }
       } else {
-        // Fallback local en modo desarrollo si la base de datos no está activa
-        if (email.toLowerCase().includes("admin")) {
-          login("ADMIN");
-          onNavigate("admin");
-        } else if (email.toLowerCase().includes("ref") || email.toLowerCase().includes("arbitro")) {
-          login("REFEREE");
-          onNavigate("referee" as any);
-        } else {
-          login("TEAM_CAPTAIN");
-          onNavigate("dashboard");
-        }
+        setError(res.message || "Credenciales incorrectas. Por favor verifica tu correo y contraseña.");
       }
-    } catch {
-      if (email.toLowerCase().includes("admin")) {
-        login("ADMIN");
-        onNavigate("admin");
-      } else if (email.toLowerCase().includes("ref") || email.toLowerCase().includes("arbitro")) {
-        login("REFEREE");
-        onNavigate("referee" as any);
-      } else {
-        login("TEAM_CAPTAIN");
-        onNavigate("dashboard");
-      }
+    } catch (err: any) {
+      setError(err?.message || "Error al conectar con el servidor. Inténtalo nuevamente.");
     } finally {
       setLoading(false);
     }

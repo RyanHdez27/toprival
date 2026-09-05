@@ -135,8 +135,22 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [currentUser, setCurrentUser] = useState<UserProfile>(INITIAL_USER);
-  const [currentRole, setCurrentRole] = useState<Role>("TEAM_CAPTAIN");
+  const [currentUser, setCurrentUser] = useState<UserProfile>(() => {
+    try {
+      const saved = localStorage.getItem("toprival_user");
+      return saved ? JSON.parse(saved) : INITIAL_USER;
+    } catch {
+      return INITIAL_USER;
+    }
+  });
+  const [currentRole, setCurrentRole] = useState<Role>(() => {
+    try {
+      const saved = localStorage.getItem("toprival_user");
+      return saved ? JSON.parse(saved).role : "TEAM_CAPTAIN";
+    } catch {
+      return "TEAM_CAPTAIN";
+    }
+  });
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return !!localStorage.getItem("toprival_token");
   });
@@ -402,12 +416,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         try {
           const profile = await api.auth.getProfile();
           if (profile) {
+            localStorage.setItem("toprival_user", JSON.stringify(profile));
             setCurrentUser(profile);
             setCurrentRole(profile.role);
             setIsAuthenticated(true);
           }
         } catch {
-          // Fallback controlado si el token expiró
+          // Token inválido o expirado
+          localStorage.removeItem("toprival_token");
+          localStorage.removeItem("toprival_user");
+          setIsAuthenticated(false);
+          setCurrentUser(INITIAL_USER);
         }
       }
 
@@ -497,8 +516,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const res = await api.auth.login({ email, passwordHash: password });
       if (res && res.token) {
         localStorage.setItem("toprival_token", res.token);
-        setCurrentUser(res.user);
-        setCurrentRole(res.user.role);
+        if (res.user) {
+          localStorage.setItem("toprival_user", JSON.stringify(res.user));
+          setCurrentUser(res.user);
+          setCurrentRole(res.user.role);
+        }
         setIsAuthenticated(true);
         return { success: true };
       }
@@ -514,8 +536,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const res = await api.auth.register({ email, nickname: nick, passwordHash: password });
       if (res && res.token) {
         localStorage.setItem("toprival_token", res.token);
-        setCurrentUser(res.user);
-        setCurrentRole(res.user.role);
+        if (res.user) {
+          localStorage.setItem("toprival_user", JSON.stringify(res.user));
+          setCurrentUser(res.user);
+          setCurrentRole(res.user.role);
+        }
         setIsAuthenticated(true);
         return { success: true };
       }
@@ -528,6 +553,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const logout = () => {
     localStorage.removeItem("toprival_token");
+    localStorage.removeItem("toprival_user");
     setCurrentUser(INITIAL_USER);
     setCurrentRole("PLAYER");
     setIsAuthenticated(false);
