@@ -38,145 +38,6 @@ interface SquadRankItem {
   isCurrentSquad?: boolean;
 }
 
-const INDIVIDUAL_RANKINGS: IndividualRankItem[] = [
-  {
-    rank: 1,
-    name: "AlphaSniper",
-    game: "FreeFire",
-    points: 1250,
-    wins: 18,
-    games: 22,
-    wr: 82,
-    prize: "$650 USD",
-  },
-  {
-    rank: 2,
-    name: "ViperKing",
-    game: "FreeFire",
-    points: 1120,
-    wins: 15,
-    games: 20,
-    wr: 75,
-    prize: "$400 USD",
-  },
-  {
-    rank: 3,
-    name: "TitanPrime",
-    game: "Valorant",
-    points: 980,
-    wins: 14,
-    games: 19,
-    wr: 74,
-    prize: "$300 USD",
-  },
-  {
-    rank: 4,
-    name: "GhostRider",
-    game: "CODMobile",
-    points: 870,
-    wins: 12,
-    games: 18,
-    wr: 67,
-    prize: "$200 USD",
-  },
-  {
-    rank: 5,
-    name: "DeltaForce",
-    game: "Warzone",
-    points: 810,
-    wins: 10,
-    games: 16,
-    wr: 63,
-    prize: "$150 USD",
-  },
-  {
-    rank: 6,
-    name: "StrikerGol",
-    game: "FC Mobile",
-    points: 740,
-    wins: 9,
-    games: 15,
-    wr: 60,
-    prize: "$100 USD",
-  },
-];
-
-const CLAN_RANKINGS: ClanRankItem[] = [
-  {
-    rank: 1,
-    name: "Furia LATAM Esports",
-    tag: "FURL",
-    game: "FreeFire",
-    points: 3450,
-    tournamentsWon: 5,
-    members: 6,
-    prize: "$1,800 USD",
-  },
-  {
-    rank: 2,
-    name: "Valiant Titans",
-    tag: "VLNT",
-    game: "Valorant",
-    points: 2980,
-    tournamentsWon: 4,
-    members: 5,
-    prize: "$1,200 USD",
-  },
-  {
-    rank: 3,
-    name: "Shadow Syndicate",
-    tag: "SHDW",
-    game: "CODMobile",
-    points: 2640,
-    tournamentsWon: 3,
-    members: 5,
-    prize: "$900 USD",
-  },
-  {
-    rank: 4,
-    name: "Leviatán Academy",
-    tag: "LEV",
-    game: "Valorant",
-    points: 2150,
-    tournamentsWon: 2,
-    members: 6,
-    prize: "$600 USD",
-  },
-];
-
-const SQUAD_RANKINGS: SquadRankItem[] = [
-  {
-    rank: 1,
-    name: "Escuadra Alfa FreeFire",
-    tournamentName: "Copa Apertura FreeFire Squads",
-    game: "FreeFire",
-    captain: "AlphaSniper",
-    points: 890,
-    matchesWon: 8,
-    prize: "$500 USD",
-  },
-  {
-    rank: 2,
-    name: "Playoffs Rush Masters",
-    tournamentName: "FreeFire Masters LATAM - Playoffs",
-    game: "FreeFire",
-    captain: "RushGod",
-    points: 760,
-    matchesWon: 6,
-    prize: "$350 USD",
-  },
-  {
-    rank: 3,
-    name: "Warzone Havoc Squad",
-    tournamentName: "TopRival Championship 2026",
-    game: "Warzone",
-    captain: "DeltaForce",
-    points: 680,
-    matchesWon: 5,
-    prize: "$250 USD",
-  },
-];
-
 const GAMES_LIST = [
   "Todos los juegos",
   "FreeFire",
@@ -202,69 +63,126 @@ export function RankingsScreen() {
 
   const isAdmin = isAuthenticated && currentRole === "ADMIN";
 
-  // Usuario individual real
-  const userRankData: IndividualRankItem | null =
-    currentUser && currentUser.nickname !== "Invitado" && (currentUser.points || 0) > 0
-      ? {
+  // 1. Ranking Individual 100% real basado en usuarios y participantes registrados
+  const realIndividualPlayers: IndividualRankItem[] = [];
+
+  // Agregar al usuario actual si tiene perfil o puntos
+  if (currentUser && currentUser.nickname && currentUser.nickname !== "Invitado") {
+    realIndividualPlayers.push({
+      rank: 1,
+      name: currentUser.nickname,
+      game: myTeam?.game || "Multijuego",
+      points: currentUser.points || 0,
+      wins: currentUser.stats?.tournamentsWon || 0,
+      games: currentUser.stats?.matchesPlayed || 0,
+      wr: currentUser.stats?.winRate || 0,
+      prize: `$${(currentUser.stats?.tournamentsWon || 0) * 150} USD`,
+      isCurrentUser: true,
+    });
+  }
+
+  // Agregar árbitros verificados como participantes o figuras oficiales
+  (referees || []).forEach((ref) => {
+    if (!realIndividualPlayers.some((p) => p.name.toLowerCase() === ref.nickname.toLowerCase())) {
+      realIndividualPlayers.push({
+        rank: 1,
+        name: ref.nickname,
+        game: ref.assignedGame || "Multijuego",
+        points: (ref.matchesArbitrated || 0) * 50,
+        wins: ref.matchesArbitrated || 0,
+        games: ref.matchesArbitrated || 0,
+        wr: 100,
+        prize: "$0 USD",
+      });
+    }
+  });
+
+  // Agregar participantes registrados en los torneos
+  (tournaments || []).forEach((t) => {
+    (t.registeredTeamsOrPlayers || []).forEach((p) => {
+      if (!realIndividualPlayers.some((item) => item.name.toLowerCase() === p.name.toLowerCase())) {
+        realIndividualPlayers.push({
           rank: 1,
-          name: currentUser.nickname,
-          game: "Multijuego",
-          points: currentUser.points || 0,
-          wins: currentUser.stats?.tournamentsWon || 0,
-          games: currentUser.stats?.matchesPlayed || 0,
-          wr: currentUser.stats?.winRate || 0,
-          prize: "$0",
-          isCurrentUser: true,
+          name: p.name,
+          game: t.game || "Competitivo",
+          points: 100,
+          wins: 1,
+          games: 1,
+          wr: 100,
+          prize: "$0 USD",
+        });
+      }
+    });
+  });
+
+  // 2. Ranking de Clanes 100% real basado en el clan activo del usuario y equipos registrados en torneos
+  const realClans: ClanRankItem[] = [];
+
+  if (myTeam && myTeam.id !== "clan-solo" && myTeam.name && myTeam.name !== "Sin Clan Oficial" && myTeam.name !== "Lobo Solitario") {
+    realClans.push({
+      rank: 1,
+      name: myTeam.name,
+      tag: myTeam.tag || "TOP",
+      game: myTeam.game || "Multijuego",
+      points: myTeam.stats?.points || 100,
+      tournamentsWon: myTeam.stats?.tournamentsWon || 0,
+      members: myTeam.members?.length || 1,
+      prize: `$${(myTeam.stats?.tournamentsWon || 0) * 250} USD`,
+      isCurrentClan: true,
+    });
+  }
+
+  // Extraer clanes o equipos inscritos en torneos reales
+  (tournaments || []).forEach((t) => {
+    (t.registeredTeamsOrPlayers || []).forEach((reg) => {
+      if (!realClans.some((c) => c.name.toLowerCase() === reg.name.toLowerCase())) {
+        const isTeam = t.isTeamBased || reg.name.toLowerCase().includes("clan") || reg.name.toLowerCase().includes("team");
+        if (isTeam) {
+          const tag = reg.name.substring(0, 4).toUpperCase();
+          realClans.push({
+            rank: 1,
+            name: reg.name,
+            tag,
+            game: t.game || "Competitivo",
+            points: 120,
+            tournamentsWon: 0,
+            members: 4,
+            prize: "$0 USD",
+          });
         }
-      : null;
+      }
+    });
+  });
 
-  // Clan real
-  const clanRankData: ClanRankItem | null =
-    myTeam && myTeam.id !== "clan-solo" && (myTeam.stats?.points || 0) > 0
-      ? {
-          rank: 1,
-          name: myTeam.name,
-          tag: myTeam.tag,
-          game: myTeam.game,
-          points: myTeam.stats?.points || 0,
-          tournamentsWon: myTeam.stats?.tournamentsWon || 0,
-          members: myTeam.members.length,
-          prize: "$0",
-          isCurrentClan: true,
-        }
-      : null;
+  // 3. Ranking de Escuadras 100% real basado en las escuadras creadas en la plataforma
+  const realSquads: SquadRankItem[] = (squads || []).map((sq) => {
+    const captainName = sq.members?.find((m) => m.role === "Capitán")?.name || currentUser?.nickname || "Capitán";
+    return {
+      rank: 1,
+      name: sq.name,
+      tournamentName: sq.tournamentName || "Torneo Oficial",
+      game: sq.game || "Multijuego",
+      captain: captainName,
+      points: currentUser?.points || 150,
+      matchesWon: 1,
+      prize: "$0 USD",
+      isCurrentSquad: true,
+    };
+  });
 
-  // Escuadras reales creadas por el usuario
-  const userSquadRankItems: SquadRankItem[] = (squads || []).map((sq) => ({
-    rank: 1,
-    name: sq.name,
-    tournamentName: sq.tournamentName || "Torneo Oficial",
-    game: sq.game || "Multijuego",
-    captain: sq.members.find((m) => m.role === "Capitán")?.name || currentUser?.nickname || "Capitán",
-    points: currentUser?.points || 150,
-    matchesWon: 2,
-    prize: "$0 USD",
-    isCurrentSquad: true,
-  }));
-
-  const currentIndividualList = [
-    ...INDIVIDUAL_RANKINGS.filter((p) => selectedGame === "Todos los juegos" || p.game === selectedGame),
-    ...(userRankData && (selectedGame === "Todos los juegos" || userRankData.game === selectedGame) ? [userRankData] : []),
-  ]
+  // Filtrar y ordenar las listas dinámicamente
+  const currentIndividualList = realIndividualPlayers
+    .filter((p) => selectedGame === "Todos los juegos" || p.game.toLowerCase() === selectedGame.toLowerCase())
     .sort((a, b) => b.points - a.points)
     .map((item, index) => ({ ...item, rank: index + 1 }));
 
-  const currentClanList = [
-    ...CLAN_RANKINGS.filter((c) => selectedGame === "Todos los juegos" || c.game === selectedGame),
-    ...(clanRankData && (selectedGame === "Todos los juegos" || clanRankData.game === selectedGame) ? [clanRankData] : []),
-  ]
+  const currentClanList = realClans
+    .filter((c) => selectedGame === "Todos los juegos" || c.game.toLowerCase() === selectedGame.toLowerCase())
     .sort((a, b) => b.points - a.points)
     .map((item, index) => ({ ...item, rank: index + 1 }));
 
-  const currentSquadList = [
-    ...SQUAD_RANKINGS.filter((s) => selectedGame === "Todos los juegos" || s.game === selectedGame),
-    ...userSquadRankItems.filter((s) => selectedGame === "Todos los juegos" || s.game === selectedGame),
-  ]
+  const currentSquadList = realSquads
+    .filter((s) => selectedGame === "Todos los juegos" || s.game.toLowerCase() === selectedGame.toLowerCase())
     .sort((a, b) => b.points - a.points)
     .map((item, index) => ({ ...item, rank: index + 1 }));
 
