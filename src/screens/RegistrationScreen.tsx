@@ -43,10 +43,20 @@ export function RegistrationScreen({ onNavigate }: { onNavigate: (s: Screen) => 
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [currentIntent, setCurrentIntent] = useState<any>(null);
+  const tournament = selectedTournament || {
+    id: "ff-live-01",
+    title: "Torneo TopRival",
+    game: "FreeFire",
+    gameIcon: "🔥",
+    mode: "Squads 4v4",
+    startDate: "15 Sep 2026",
+    startTime: "20:00 COT",
+    entryFee: "Gratis",
+  };
 
   const isPaidTournament = Boolean(
-    selectedTournament.entryFee &&
-      !["gratis", "free", "$0", "0"].includes(selectedTournament.entryFee.toLowerCase().trim())
+    tournament.entryFee &&
+      !["gratis", "free", "$0", "0"].includes(tournament.entryFee.toLowerCase().trim())
   );
 
   // Inyectar script de Wompi Widget en segundo plano
@@ -62,15 +72,15 @@ export function RegistrationScreen({ onNavigate }: { onNavigate: (s: Screen) => 
   const handleInitiatePayment = async () => {
     setIsProcessing(true);
     try {
-      const teamIdToRegister = mode === "team" ? myTeam.id : undefined;
-      const intent = await api.payments.createIntent(selectedTournament.id, {
+      const teamIdToRegister = mode === "team" ? myTeam?.id : undefined;
+      const intent = await api.payments.createIntent(tournament.id, {
         teamId: teamIdToRegister,
         nick,
         discord,
       });
 
       if (intent.isFree) {
-        await registerCurrentTeamToTournament(selectedTournament.id);
+        await registerCurrentTeamToTournament(tournament.id);
         setLastPaymentReceipt(null);
         onNavigate("confirmation");
         return;
@@ -93,16 +103,16 @@ export function RegistrationScreen({ onNavigate }: { onNavigate: (s: Screen) => 
           checkout.open(async function (result: any) {
             const tx = result?.transaction;
             if (tx && tx.status === "APPROVED") {
-              await registerCurrentTeamToTournament(selectedTournament.id);
+              await registerCurrentTeamToTournament(tournament.id);
               setLastPaymentReceipt({
                 reference: tx.reference || intent.reference || "WOMPI-TR",
                 gateway: "WOMPI",
-                amountFormatted: intent.amountFormatted || selectedTournament.entryFee || "$15.000 COP",
+                amountFormatted: intent.amountFormatted || tournament.entryFee || "$15.000 COP",
                 amountInCents: intent.amountInCents || 1500000,
                 currency: "COP",
                 paymentMethodType: tx.payment_method_type || selectedMethod,
                 status: "APPROVED",
-                tournamentTitle: selectedTournament.title,
+                tournamentTitle: tournament.title,
                 customerName: nick,
                 paidAt: new Date().toLocaleString("es-CO"),
                 registrationId: tx.id || "reg-wompi",
@@ -134,16 +144,16 @@ export function RegistrationScreen({ onNavigate }: { onNavigate: (s: Screen) => 
     try {
       const res = await api.payments.simulateSandboxApproval(currentIntent.reference, selectedMethod);
       if (res.success) {
-        await registerCurrentTeamToTournament(selectedTournament.id);
+        await registerCurrentTeamToTournament(tournament.id);
         setLastPaymentReceipt({
           reference: currentIntent.reference,
           gateway: "WOMPI",
-          amountFormatted: currentIntent.amountFormatted || selectedTournament.entryFee || "$15.000 COP",
+          amountFormatted: currentIntent.amountFormatted || tournament.entryFee || "$15.000 COP",
           amountInCents: currentIntent.amountInCents || 1500000,
           currency: "COP",
           paymentMethodType: selectedMethod,
           status: "APPROVED",
-          tournamentTitle: selectedTournament.title,
+          tournamentTitle: tournament.title,
           customerName: nick,
           paidAt: new Date().toLocaleString("es-CO"),
           registrationId: res.registrationId || "reg-wompi-sim",
@@ -165,7 +175,7 @@ export function RegistrationScreen({ onNavigate }: { onNavigate: (s: Screen) => 
       if (isPaidTournament) {
         handleInitiatePayment();
       } else {
-        registerCurrentTeamToTournament(selectedTournament.id);
+        registerCurrentTeamToTournament(tournament.id);
         setLastPaymentReceipt(null);
         onNavigate("confirmation");
       }
@@ -181,7 +191,7 @@ export function RegistrationScreen({ onNavigate }: { onNavigate: (s: Screen) => 
           </div>
           <h2 className="text-xl font-bold text-[#FAFAFA]">Inscripción a Torneo</h2>
           <p className="text-sm text-[#A1A1AA]">
-            Para inscribir a tu equipo o competir en <strong className="text-[#FAFAFA]">{selectedTournament.title}</strong> necesitas tener una cuenta en TopRival.
+            Para inscribir a tu equipo o competir en <strong className="text-[#FAFAFA]">{tournament.title}</strong> necesitas tener una cuenta en TopRival.
           </p>
           <div className="pt-2 flex flex-col gap-2.5">
             <Button fullWidth size="lg" onClick={() => onNavigate("login")}>
@@ -215,11 +225,11 @@ export function RegistrationScreen({ onNavigate }: { onNavigate: (s: Screen) => 
           </button>
           <div className="flex items-center gap-3 mb-4">
             <div className="w-8 h-8 rounded-lg bg-[#D4860A]/20 flex items-center justify-center text-lg">
-              {selectedTournament.gameIcon}
+              {tournament.gameIcon}
             </div>
             <div>
-              <h1 className="font-bold text-[#FAFAFA]">Inscripción — {selectedTournament.title}</h1>
-              <p className="text-sm text-[#71717A]">{selectedTournament.game} · {selectedTournament.mode} · {selectedTournament.startDate}</p>
+              <h1 className="font-bold text-[#FAFAFA]">Inscripción — {tournament.title}</h1>
+              <p className="text-sm text-[#71717A]">{tournament.game} · {tournament.mode} · {tournament.startDate}</p>
             </div>
           </div>
           {/* Step indicator */}
@@ -313,9 +323,9 @@ export function RegistrationScreen({ onNavigate }: { onNavigate: (s: Screen) => 
               {mode === "team" && (
                 <Select
                   label="Seleccionar equipo"
-                  value={myTeam.id}
+                  value={myTeam?.id || "solo"}
                   options={[
-                    { value: myTeam.id, label: `${myTeam.name} (${myTeam.members.length} miembros)` },
+                    { value: myTeam?.id || "solo", label: `${myTeam?.name || "Sin Clan"} (${myTeam?.members?.length || 0} miembros)` },
                   ]}
                 />
               )}
@@ -344,13 +354,13 @@ export function RegistrationScreen({ onNavigate }: { onNavigate: (s: Screen) => 
 
             <Card className="p-5 space-y-3">
               {[
-                { label: "Torneo", value: selectedTournament.title },
-                { label: "Juego", value: selectedTournament.game },
-                { label: "Modalidad", value: mode === "solo" ? "Jugador Individual" : `Equipo: ${myTeam.name}` },
+                { label: "Torneo", value: tournament.title },
+                { label: "Juego", value: tournament.game },
+                { label: "Modalidad", value: mode === "solo" ? "Jugador Individual" : `Equipo: ${myTeam?.name || "Sin Clan"}` },
                 { label: "Capitán / Nick", value: nick },
                 { label: "Discord", value: discord },
-                { label: "Fecha de inicio", value: `${selectedTournament.startDate} · ${selectedTournament.startTime}` },
-                { label: "Costo de inscripción", value: selectedTournament.entryFee || "Gratis" },
+                { label: "Fecha de inicio", value: `${tournament.startDate} · ${tournament.startTime}` },
+                { label: "Costo de inscripción", value: tournament.entryFee || "Gratis" },
               ].map((r) => (
                 <div key={r.label} className="flex justify-between text-sm">
                   <span className="text-[#71717A]">{r.label}</span>
@@ -409,7 +419,7 @@ export function RegistrationScreen({ onNavigate }: { onNavigate: (s: Screen) => 
                   <div className="flex items-center justify-between text-xs text-[#A1A1AA] pt-1">
                     <span>Total liquidado:</span>
                     <span className="text-base font-extrabold text-[#D4860A]">
-                      {selectedTournament.entryFee}
+                      {tournament.entryFee}
                     </span>
                   </div>
                 </div>
@@ -437,7 +447,7 @@ export function RegistrationScreen({ onNavigate }: { onNavigate: (s: Screen) => 
             ) : step < 3 ? (
               "Continuar"
             ) : isPaidTournament ? (
-              `Pagar ${selectedTournament.entryFee} con Wompi`
+              `Pagar ${tournament.entryFee} con Wompi`
             ) : (
               "Confirmar Inscripción Gratuita"
             )}

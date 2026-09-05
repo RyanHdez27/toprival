@@ -1151,7 +1151,7 @@ export function AdminScreen() {
 
                 <div>
                   <label className="block text-xs font-semibold text-[#A1A1AA] uppercase tracking-wider mb-1.5">
-                    Costo Inscripción (Wompi)
+                    Costo Inscripción
                   </label>
                   <div className="space-y-1">
                     <input
@@ -1162,7 +1162,7 @@ export function AdminScreen() {
                       className="w-full bg-[#18181B] border border-[#27272A] rounded-lg px-3 py-2 text-sm text-[#FAFAFA] focus:outline-none focus:border-[#D4860A]"
                     />
                     <div className="flex gap-1 flex-wrap">
-                      {["Gratis", "$15.000 COP", "$25.000 COP"].map((fee) => (
+                      {["Gratis", "$15.000", "$25.000", "$50.000", "$100.000"].map((fee) => (
                         <button
                           key={fee}
                           type="button"
