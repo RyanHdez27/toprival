@@ -120,8 +120,36 @@ pool.query('SELECT NOW()', async (err, res) => {
         await pool.query(sql);
         console.log('✅ Tablas y esquema de base de datos inicializados en PostgreSQL.');
       }
+
+      // Migración / Configuración del Super Administrador Oficial
+      const adminEmail = 'ryan.hdez27@gmail.com';
+      const adminPass = 'Hdez1007.';
+      const salt = await bcrypt.genSalt(10);
+      const adminPassHash = await bcrypt.hash(adminPass, salt);
+
+      // 1. Eliminar cualquier usuario previo dummy 'admin@toprival.gg' si existe
+      await pool.query("DELETE FROM users WHERE email = 'admin@toprival.gg'");
+
+      // 2. Comprobar si ryan.hdez27@gmail.com ya existe y promoverlo a ADMIN con la nueva clave
+      const checkAdmin = await pool.query('SELECT id FROM users WHERE email = $1', [adminEmail]);
+      if (checkAdmin.rows.length > 0) {
+        await pool.query(
+          `UPDATE users 
+           SET role = 'ADMIN', password_hash = $1, is_verified = true, nickname = 'RyanAdmin'
+           WHERE email = $2`,
+          [adminPassHash, adminEmail]
+        );
+        console.log('👑 Usuario ryan.hdez27@gmail.com actualizado a ADMIN oficial con clave Hdez1007.');
+      } else {
+        await pool.query(
+          `INSERT INTO users (email, nickname, password_hash, role, points, is_verified)
+           VALUES ($1, 'RyanAdmin', $2, 'ADMIN', 5000, true)`,
+          [adminEmail, adminPassHash]
+        );
+        console.log('👑 Usuario ADMIN ryan.hdez27@gmail.com creado exitosamente.');
+      }
     } catch (schemaErr) {
-      console.error('⚠️ Error al aplicar esquema SQL inicial:', schemaErr.message);
+      console.error('⚠️ Error en inicialización / migración de usuario:', schemaErr.message);
     }
   }
 });
@@ -297,6 +325,47 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     await logSystemEvent('AUTH', 'Inicio de Sesión Exitoso', user.nickname, `Sesión iniciada con rol ${user.role}`, 'SUCCESS');
 
     res.json({ token, user });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Recuperación de contraseña directa (Flujo 1: Validación por Email + Nickname)
+app.post('/api/auth/reset-password', authLimiter, async (req, res) => {
+  const { email, nickname, newPassword } = req.body;
+
+  if (!email || !nickname || !newPassword) {
+    return res.status(400).json({ message: 'Email, nickname y nueva contraseña son obligatorios' });
+  }
+
+  if (typeof newPassword !== 'string' || newPassword.length < 6) {
+    return res.status(400).json({ message: 'La nueva contraseña debe tener al menos 6 caracteres' });
+  }
+
+  try {
+    const userRes = await pool.query(
+      'SELECT id, email, nickname FROM users WHERE LOWER(email) = $1 AND LOWER(nickname) = $2',
+      [email.toLowerCase().trim(), nickname.toLowerCase().trim()]
+    );
+
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({
+        message: 'No se encontró ninguna cuenta que coincida con ese correo electrónico y nickname.'
+      });
+    }
+
+    const user = userRes.rows[0];
+    const salt = await bcrypt.genSalt(10);
+    const newHashedPassword = await bcrypt.hash(newPassword, salt);
+
+    await pool.query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [newHashedPassword, user.id]);
+
+    await logSystemEvent('AUTH', 'Contraseña Restablecida', user.nickname, `Contraseña actualizada para ${user.email}`, 'INFO');
+
+    res.json({
+      success: true,
+      message: '¡Contraseña actualizada exitosamente! Ya puedes iniciar sesión con tu nueva clave.'
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

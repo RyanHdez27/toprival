@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useApp } from "../context/AppContext";
-import { Button, Input, Icon } from "../components/ui";
+import { Button, Input, Icon, Card } from "../components/ui";
+import { api } from "../services/api";
 
 type Screen =
   | "home"
@@ -21,11 +22,57 @@ type Screen =
   | "confirmation";
 
 export function LoginScreen({ onNavigate }: { onNavigate: (s: Screen) => void }) {
-  const { loginWithCredentials, login } = useApp();
+  const { loginWithCredentials, showAlert } = useApp();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Estados para Recuperación de Contraseña (Flujo 1)
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotNick, setForgotNick] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState<string | null>(null);
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotEmail || !forgotNick || !newPassword) return;
+
+    if (newPassword.length < 6) {
+      setForgotError("La nueva contraseña debe tener al menos 6 caracteres.");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setForgotError("Las contraseñas no coinciden.");
+      return;
+    }
+
+    setForgotError(null);
+    setForgotLoading(true);
+
+    try {
+      const res = await api.auth.resetPassword({
+        email: forgotEmail.trim(),
+        nickname: forgotNick.trim(),
+        newPassword,
+      });
+
+      if (res.success) {
+        setShowForgotModal(false);
+        setEmail(forgotEmail.trim());
+        setPassword(newPassword);
+        showAlert("¡Contraseña restablecida!", res.message || "Tu contraseña ha sido actualizada. Ya puedes iniciar sesión.", "success");
+      }
+    } catch (err: any) {
+      setForgotError(err?.message || "Error al restablecer la contraseña. Verifica tus datos.");
+    } finally {
+      setForgotLoading(false);
+    }
+  };
 
   const onSubmitForm = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,6 +154,11 @@ export function LoginScreen({ onNavigate }: { onNavigate: (s: Screen) => void })
           <div className="flex justify-end">
             <button
               type="button"
+              onClick={() => {
+                setForgotEmail(email);
+                setForgotError(null);
+                setShowForgotModal(true);
+              }}
               className="text-xs text-[#F5B830] hover:text-[#D4860A] transition-colors cursor-pointer"
             >
               ¿Olvidaste tu contraseña?
@@ -127,6 +179,86 @@ export function LoginScreen({ onNavigate }: { onNavigate: (s: Screen) => void })
             Regístrate gratis
           </button>
         </p>
+
+        {/* Modal de Recuperación de Contraseña (Flujo 1: Validación Directa) */}
+        {showForgotModal && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <Card className="max-w-md w-full p-6 border-[#D4860A]/40 bg-[#111113] space-y-4 animate-in fade-in zoom-in-95">
+              <div className="flex justify-between items-start border-b border-[#27272A] pb-3">
+                <div>
+                  <h3 className="text-base font-bold text-[#FAFAFA]">Recuperar Contraseña</h3>
+                  <p className="text-xs text-[#71717A]">Ingresa tus datos para restablecer tu clave de acceso</p>
+                </div>
+                <button
+                  onClick={() => setShowForgotModal(false)}
+                  className="text-[#71717A] hover:text-[#FAFAFA] text-lg font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleResetPassword} className="space-y-3 pt-1">
+                <Input
+                  label="Correo Electrónico Registrado"
+                  type="email"
+                  required
+                  placeholder="ejemplo@correo.com"
+                  value={forgotEmail}
+                  onChange={setForgotEmail}
+                />
+
+                <Input
+                  label="Nickname en TopRival"
+                  required
+                  placeholder="TuNicknameExacto"
+                  value={forgotNick}
+                  onChange={setForgotNick}
+                  hint="Por seguridad, debe coincidir con el nickname de tu cuenta"
+                />
+
+                <Input
+                  label="Nueva Contraseña"
+                  type="password"
+                  required
+                  placeholder="Mínimo 6 caracteres"
+                  value={newPassword}
+                  onChange={setNewPassword}
+                />
+
+                <Input
+                  label="Confirmar Nueva Contraseña"
+                  type="password"
+                  required
+                  placeholder="Repite tu contraseña"
+                  value={confirmPassword}
+                  onChange={setConfirmPassword}
+                />
+
+                {forgotError && (
+                  <div className="p-3 bg-[#EF4444]/15 border border-[#EF4444]/30 rounded-xl text-xs text-[#EF4444]">
+                    {forgotError}
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-2 pt-2">
+                  <Button fullWidth type="submit" disabled={forgotLoading} className="justify-center font-bold">
+                    {forgotLoading ? "Actualizando..." : "Restablecer Contraseña"}
+                  </Button>
+                  <Button
+                    fullWidth
+                    variant="outline"
+                    type="button"
+                    onClick={() => setShowForgotModal(false)}
+                    disabled={forgotLoading}
+                    className="justify-center"
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              </form>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
   );

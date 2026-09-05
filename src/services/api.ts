@@ -58,6 +58,11 @@ class ApiClient {
         method: 'PUT',
         body: JSON.stringify(data),
       }),
+    resetPassword: (data: { email: string; nickname: string; newPassword: string }) =>
+      this.request<{ success: boolean; message: string }>('/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
   };
 
   // --- Tournaments (CU-04, CU-05, CU-11) ---
