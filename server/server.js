@@ -78,6 +78,14 @@ app.use(cors());
 app.use(express.json({ limit: '2mb' })); // Limita el tamaño del payload JSON
 app.use('/uploads', express.static(uploadsDir));
 
+// Health check endpoints para Railway / Render
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', message: 'TopRival API is running', timestamp: new Date().toISOString() });
+});
+app.get('/health', (req, res) => {
+  res.json({ status: 'healthy' });
+});
+
 const poolConfig = process.env.DATABASE_URL
   ? {
       connectionString: process.env.DATABASE_URL,
@@ -946,8 +954,8 @@ app.use((err, req, res, next) => {
   next();
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor backend TopRival activo en http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Servidor backend TopRival activo en http://0.0.0.0:${PORT}`);
   console.log(`⏱️ Persistencia 100% PostgreSQL conectada`);
   console.log(`🛡️ Seguridad: Helmet activo, Rate Limiting configurado, Multer blindado`);
 });
