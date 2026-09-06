@@ -210,7 +210,17 @@ class ApiClient {
 
   // --- Pagos y Pasarela Wompi ---
   payments = {
-    createIntent: (tournamentId: string, data: { teamId?: string; nick?: string; discord?: string }) =>
+    createIntent: (
+      tournamentId: string,
+      data: {
+        teamId?: string;
+        nick?: string;
+        discord?: string;
+        tournamentTitle?: string;
+        game?: string;
+        entryFee?: string;
+      }
+    ) =>
       this.request<{
         isFree: boolean;
         reference?: string;

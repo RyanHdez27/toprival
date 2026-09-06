@@ -205,6 +205,9 @@ export function RegistrationScreen({ onNavigate }: { onNavigate: (s: Screen) => 
         teamId: teamIdToRegister,
         nick,
         discord,
+        tournamentTitle: tournament.title,
+        game: tournament.game,
+        entryFee: tournament.entryFee,
       });
 
       if (intent.isFree) {
