@@ -234,12 +234,13 @@ export function RegistrationScreen({ onNavigate }: { onNavigate: (s: Screen) => 
           checkout.open(async function (result: any) {
             const tx = result?.transaction;
             if (tx && tx.status === "APPROVED") {
-              await registerCurrentTeamToTournament(tournament.id, selectedParticipant);
+              const cleanDigits = (tournament.entryFee || "").replace(/\D/g, "");
+              const calculatedCents = cleanDigits ? parseInt(cleanDigits, 10) * 100 : 0;
               setLastPaymentReceipt({
                 reference: tx.reference || intent.reference || "WOMPI-TR",
                 gateway: "WOMPI",
-                amountFormatted: intent.amountFormatted || tournament.entryFee || "$15.000 COP",
-                amountInCents: intent.amountInCents || 1500000,
+                amountFormatted: intent.amountFormatted || tournament.entryFee || `$${(calculatedCents / 100).toLocaleString("es-CO")} COP`,
+                amountInCents: intent.amountInCents || calculatedCents,
                 currency: "COP",
                 paymentMethodType: tx.payment_method_type || selectedMethod,
                 status: "APPROVED",
@@ -283,11 +284,13 @@ export function RegistrationScreen({ onNavigate }: { onNavigate: (s: Screen) => 
       const res = await api.payments.simulateSandboxApproval(currentIntent.reference, selectedMethod);
       if (res.success) {
         await registerCurrentTeamToTournament(tournament.id, selectedParticipant);
+        const cleanDigits = (tournament.entryFee || "").replace(/\D/g, "");
+        const calculatedCents = cleanDigits ? parseInt(cleanDigits, 10) * 100 : 0;
         setLastPaymentReceipt({
           reference: currentIntent.reference,
           gateway: "WOMPI",
-          amountFormatted: currentIntent.amountFormatted || tournament.entryFee || "$15.000 COP",
-          amountInCents: currentIntent.amountInCents || 1500000,
+          amountFormatted: currentIntent.amountFormatted || tournament.entryFee || `$${(calculatedCents / 100).toLocaleString("es-CO")} COP`,
+          amountInCents: currentIntent.amountInCents || calculatedCents,
           currency: "COP",
           paymentMethodType: selectedMethod,
           status: "APPROVED",

@@ -616,28 +616,9 @@ app.post('/api/tournaments/:id/payment-intent', authenticateToken, async (req, r
       }
     }
 
-    // Si no está en BD o no es UUID, construir objeto de torneo resiliente
-    if (!tournament) {
-      tournament = {
-        id,
-        title: req.body.tournamentTitle || 'Torneo Oficial TopRival',
-        game: req.body.game || 'FreeFire',
-        entry_fee: entryFee || '$15.000 COP'
-      };
-    }
-
-    // 2. Verificar si ya está registrado (solo si hay IDs válidos de Postgres)
-    if (isIdUUID && isUserIdUUID) {
-      const checkReg = await pool.query(
-        'SELECT * FROM tournament_registrations WHERE tournament_id = $1 AND (user_id = $2 OR (team_id IS NOT NULL AND team_id = $3))',
-        [id, userId, isTeamIdUUID ? teamId : null]
-      );
-      if (checkReg.rows.length > 0) {
-        return res.status(400).json({ message: 'Ya estás registrado en este torneo' });
-      }
-    }
-
-    const amountInCents = parseEntryFeeToCents(tournament.entry_fee);
+    // Determinar la tarifa oficial: dar prioridad al entryFee explícito enviado por el cliente o al del torneo
+    const effectiveEntryFee = entryFee || tournament?.entry_fee || 'Gratis';
+    const amountInCents = parseEntryFeeToCents(effectiveEntryFee);
 
     // Si es gratuito, no requiere pasarela de pago
     if (amountInCents <= 0) {
@@ -671,11 +652,14 @@ app.post('/api/tournaments/:id/payment-intent', authenticateToken, async (req, r
       }
     }
 
+    const tournamentTitle = req.body.tournamentTitle || tournament?.title || 'Torneo Oficial TopRival';
+    const tournamentGame = req.body.game || tournament?.game || 'FreeFire';
+
     await logSystemEvent(
       'PAYMENT',
       'Intención de Pago Wompi Generada',
       customerNickname,
-      `Referencia: ${reference} · Monto: $${amountInCents / 100} COP para ${tournament.title}`,
+      `Referencia: ${reference} · Monto: $${amountInCents / 100} COP para ${tournamentTitle}`,
       'INFO'
     );
 
@@ -688,10 +672,10 @@ app.post('/api/tournaments/:id/payment-intent', authenticateToken, async (req, r
       publicKey: WOMPI_PUBLIC_KEY,
       signature,
       tournament: {
-        id: tournament.id,
-        title: tournament.title,
-        game: tournament.game,
-        entryFee: tournament.entry_fee
+        id,
+        title: tournamentTitle,
+        game: tournamentGame,
+        entryFee: effectiveEntryFee
       },
       customer: {
         email: customerEmail,
